@@ -4,6 +4,7 @@ import { createMatcher } from "../src/matcher";
 import type { Offer } from "../src/types";
 import type { Llm } from "../src/llm/llm";
 import type { OfferProvider } from "../src/providers/marktguru";
+import type { StoreKey } from "../src/stores";
 
 const offer = (over: Partial<Offer>): Offer => ({
   externalId: 1, store: "edeka", storeName: "Edeka", product: "Schmand",
@@ -108,4 +109,33 @@ test("matchIngredient picks cheapest by effectiveUnitPrice using referencePrice-
   // Aldi wins because its effectiveUnitPrice (price=0.79, referencePrice=null→0.79) < Rewe's referencePrice=1.20
   expect(best!.storeName).toBe("Aldi");
   expect(best!.price).toBe(0.79);
+});
+
+test("matchIngredient drops offers whose store is not in the whitelist", async () => {
+  const db = openDb(":memory:");
+  // Cheapest by effectiveUnitPrice is Metro (out of scope) and must be ignored.
+  const provider: OfferProvider = {
+    async search() {
+      return [
+        offer({ externalId: 20, store: "metro", storeName: "Metro", referencePrice: 0.5 }),
+        offer({ externalId: 21, store: "aldi-nord", storeName: "Aldi Nord", referencePrice: 0.99 }),
+      ];
+    },
+  };
+  const whitelist = new Set<StoreKey>(["aldi", "lidl"]);
+  const m = createMatcher({ db, llm: llmStub(["Schmand"]), provider, week: "2026-W26", whitelist });
+  const best = await m.matchIngredient("сметана");
+  expect(best!.storeName).toBe("Aldi Nord");
+});
+
+test("matchIngredient without a whitelist keeps all offers", async () => {
+  const db = openDb(":memory:");
+  const provider: OfferProvider = {
+    async search() {
+      return [offer({ externalId: 30, store: "metro", storeName: "Metro", referencePrice: 0.5 })];
+    },
+  };
+  const m = createMatcher({ db, llm: llmStub(["Schmand"]), provider, week: "2026-W26" });
+  const best = await m.matchIngredient("сметана");
+  expect(best!.storeName).toBe("Metro");
 });

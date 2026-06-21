@@ -4,6 +4,7 @@ import type { Llm } from "./llm/llm";
 import type { OfferProvider } from "./providers/marktguru";
 import type { Offer } from "./types";
 import { dedupeOffers, effectiveUnitPrice } from "./normalize";
+import { canonicalStore, type StoreKey } from "./stores";
 
 const TermsSchema = z.object({ terms: z.array(z.string()).min(1).max(6) });
 
@@ -17,8 +18,9 @@ export function createMatcher(deps: {
   llm: Llm;
   provider: OfferProvider;
   week: string;
+  whitelist?: ReadonlySet<StoreKey>;
 }): Matcher {
-  const { db, llm, provider, week } = deps;
+  const { db, llm, provider, week, whitelist } = deps;
 
   async function searchTerms(canonical: string): Promise<string[]> {
     const row = db
@@ -52,7 +54,13 @@ export function createMatcher(deps: {
     const terms = await searchTerms(canonical);
     const found: Offer[] = [];
     for (const t of terms) found.push(...(await provider.search(t)));
-    const deduped = dedupeOffers(found);
+    const inScope = whitelist
+      ? found.filter((o) => {
+          const key = canonicalStore(o.store) ?? canonicalStore(o.storeName);
+          return key !== null && whitelist.has(key);
+        })
+      : found;
+    const deduped = dedupeOffers(inScope);
     const best = deduped.length
       ? deduped.reduce((a, b) => (effectiveUnitPrice(b) < effectiveUnitPrice(a) ? b : a))
       : null;
