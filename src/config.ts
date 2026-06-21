@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { STORE_KEYS, type StoreKey } from "./stores";
 
 const csvNumbers = z
   .string()
@@ -19,6 +20,13 @@ const schema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1),
   LLM_MODEL: z.string().default("claude-haiku-4-5"),
   PROXY_MODE: z.enum(["none", "pool", "service"]).default("none"),
+  STORE_WHITELIST: z
+    .string()
+    .default("lidl,penny,kaufland,edeka,dm,aldi,netto,rewe")
+    .transform((s) => s.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean))
+    .pipe(z.array(z.enum(STORE_KEYS)).min(1)),
+  OFFER_COVERAGE_MIN: z.coerce.number().min(0).max(1).default(0.7),
+  DIGEST_LIMIT: z.coerce.number().int().positive().default(5),
 });
 
 export type ProxyMode = "none" | "pool" | "service";
@@ -31,6 +39,9 @@ export type Config = {
   anthropicApiKey: string;
   llmModel: string;
   proxyMode: ProxyMode;
+  storeWhitelist: StoreKey[];
+  offerCoverageMin: number;
+  digestLimit: number;
 };
 
 export function loadConfig(env: Record<string, string | undefined>): Config {
@@ -43,5 +54,8 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     anthropicApiKey: p.ANTHROPIC_API_KEY,
     llmModel: p.LLM_MODEL,
     proxyMode: p.PROXY_MODE,
+    storeWhitelist: p.STORE_WHITELIST,
+    offerCoverageMin: p.OFFER_COVERAGE_MIN,
+    digestLimit: p.DIGEST_LIMIT,
   };
 }
