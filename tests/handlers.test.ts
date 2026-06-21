@@ -9,66 +9,85 @@ test("isAllowed enforces the whitelist", () => {
   expect(isAllowed(undefined, [111])).toBe(false);
 });
 
-test("handleRecommend formats the cheapest dish with its shopping list", async () => {
+test("handleRecommend renders a compact line per qualifying dish", async () => {
   const offers: Record<string, Offer> = {
-    "сметана": { externalId: 1, store: "kaufland", storeName: "Kaufland", product: "Schmand",
-      price: 0.99, oldPrice: null, referencePrice: 0.99, unit: "St", validFrom: "", validTo: "" },
-    "картофель": { externalId: 2, store: "aldi", storeName: "Aldi", product: "Kartoffeln 2,5kg",
+    "картофель": { externalId: 1, store: "aldi", storeName: "Aldi", product: "Kartoffeln",
       price: 1.99, oldPrice: null, referencePrice: 0.8, unit: "kg", validFrom: "", validTo: "" },
+    "сметана": { externalId: 2, store: "kaufland", storeName: "Kaufland", product: "Schmand",
+      price: 0.99, oldPrice: null, referencePrice: 0.99, unit: "St", validFrom: "", validTo: "" },
   };
   const matcher: Matcher = {
     async searchTerms() { return []; },
     async matchIngredient(c) { return offers[c] ?? null; },
   };
   const dishes: Dish[] = [{
-    nameRu: "Картофельное пюре", nameUa: null, nameDe: null, cuisine: "ru", tags: [], servings: 4,
+    nameRu: "Картофельное пюре", nameUa: null, nameDe: null, cuisine: "ru",
+    course: "second", keepsDays: 3, tags: [], servings: 4,
     ingredients: [{ canonical: "картофель", qty: 1, unit: "кг" }, { canonical: "сметана", qty: 1, unit: "уп" }],
   }];
   const text = await handleRecommend({ dishes, matcher });
   expect(text).toContain("Картофельное пюре");
-  expect(text).toContain("Kaufland");
-  expect(text).toContain("Aldi");
-  expect(text).toContain("Schmand");
+  expect(text).toContain("2/2"); // both ingredients on offer
+  expect(text).toContain("на 4 порц"); // servings surfaced
+  expect(text).toContain("3 дн"); // keeps_days surfaced
 });
 
-test("handleRecommend respects topN parameter", async () => {
+test("handleRecommend omits dishes below the coverage threshold", async () => {
   const offers: Record<string, Offer> = {
-    "помидор": { externalId: 1, store: "kaufland", storeName: "Kaufland", product: "Tomatoes",
+    "картофель": { externalId: 1, store: "aldi", storeName: "Aldi", product: "Kartoffeln",
+      price: 1.0, oldPrice: null, referencePrice: 1.0, unit: "kg", validFrom: "", validTo: "" },
+  };
+  const matcher: Matcher = {
+    async searchTerms() { return []; },
+    async matchIngredient(c) { return offers[c] ?? null; },
+  };
+  // 1 of 3 ingredients on offer → coverage 0.33 < 0.7 → omitted → fallback.
+  const dishes: Dish[] = [{
+    nameRu: "Борщ", nameUa: null, nameDe: null, cuisine: "ua",
+    course: "first", keepsDays: 4, tags: [], servings: 4,
+    ingredients: [
+      { canonical: "картофель", qty: 1, unit: "кг" },
+      { canonical: "свёкла", qty: 1, unit: "кг" },
+      { canonical: "капуста", qty: 1, unit: "кг" },
+    ],
+  }];
+  const text = await handleRecommend({ dishes, matcher });
+  expect(text).toContain("70%");
+  expect(text).not.toContain("Борщ");
+});
+
+test("handleRecommend respects the limit parameter", async () => {
+  const offers: Record<string, Offer> = {
+    "помидор": { externalId: 1, store: "kaufland", storeName: "Kaufland", product: "Tomaten",
       price: 1.99, oldPrice: null, referencePrice: 1.99, unit: "kg", validFrom: "", validTo: "" },
-    "огурец": { externalId: 2, store: "aldi", storeName: "Aldi", product: "Cucumbers",
+    "огурец": { externalId: 2, store: "aldi", storeName: "Aldi", product: "Gurken",
       price: 0.99, oldPrice: null, referencePrice: 0.99, unit: "kg", validFrom: "", validTo: "" },
-    "лук": { externalId: 3, store: "metro", storeName: "Metro", product: "Onions",
-      price: 0.49, oldPrice: null, referencePrice: 0.49, unit: "kg", validFrom: "", validTo: "" },
   };
   const matcher: Matcher = {
     async searchTerms() { return []; },
     async matchIngredient(c) { return offers[c] ?? null; },
   };
   const dishes: Dish[] = [
-    {
-      nameRu: "Салат", nameUa: null, nameDe: null, cuisine: "ru", tags: [], servings: 2, keepsDays: 3,
-      ingredients: [{ canonical: "помидор", qty: 2, unit: "шт" }, { canonical: "огурец", qty: 1, unit: "шт" }],
-    },
-    {
-      nameRu: "Суп", nameUa: null, nameDe: null, cuisine: "ru", tags: [], servings: 4, keepsDays: 1,
-      ingredients: [{ canonical: "лук", qty: 1, unit: "шт" }],
-    },
+    { nameRu: "Салат", nameUa: null, nameDe: null, cuisine: "ru", course: "second", keepsDays: 1, tags: [], servings: 2,
+      ingredients: [{ canonical: "помидор", qty: 1, unit: "шт" }] },
+    { nameRu: "Окрошка", nameUa: null, nameDe: null, cuisine: "ru", course: "first", keepsDays: 1, tags: [], servings: 2,
+      ingredients: [{ canonical: "огурец", qty: 1, unit: "шт" }] },
   ];
-  const text = await handleRecommend({ dishes, matcher, topN: 1 });
-  expect(text).toContain("Салат");
-  expect(text).not.toContain("Суп");
+  const text = await handleRecommend({ dishes, matcher, limit: 1 });
+  const shown = ["Салат", "Окрошка"].filter((n) => text.includes(n));
+  expect(shown).toHaveLength(1);
 });
 
-test("handleRecommend with no offers returns fallback message", async () => {
+test("handleRecommend returns a threshold-aware fallback when nothing qualifies", async () => {
   const matcher: Matcher = {
     async searchTerms() { return []; },
     async matchIngredient() { return null; },
   };
   const dishes: Dish[] = [{
-    nameRu: "Борщ", nameUa: null, nameDe: null, cuisine: "ru", tags: [], servings: 4,
-    ingredients: [{ canonical: "свекла", qty: 1, unit: "кг" }, { canonical: "капуста", qty: 1, unit: "кг" }],
+    nameRu: "Борщ", nameUa: null, nameDe: null, cuisine: "ua", course: "first", keepsDays: 4, tags: [], servings: 4,
+    ingredients: [{ canonical: "свёкла", qty: 1, unit: "кг" }],
   }];
   const text = await handleRecommend({ dishes, matcher });
-  expect(text).toContain("На этой неделе выгодных совпадений по акциям не нашёл");
+  expect(text).toContain("70%");
   expect(text).not.toEqual("");
 });

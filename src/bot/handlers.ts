@@ -1,6 +1,9 @@
 import type { Dish, Offer } from "../types";
 import type { Matcher } from "../matcher";
-import { rankDishes, buildShoppingList } from "../recommender";
+import { rankDishes } from "../recommender";
+
+const DEFAULT_COVERAGE_MIN = 0.7;
+const DEFAULT_DIGEST_LIMIT = 5;
 
 export function isAllowed(userId: number | undefined, allowed: number[]): boolean {
   return userId !== undefined && allowed.includes(userId);
@@ -9,9 +12,12 @@ export function isAllowed(userId: number | undefined, allowed: number[]): boolea
 export async function handleRecommend(deps: {
   dishes: Dish[];
   matcher: Matcher;
-  topN?: number;
+  coverageMin?: number;
+  limit?: number;
 }): Promise<string> {
-  const topN = deps.topN ?? 3;
+  const coverageMin = deps.coverageMin ?? DEFAULT_COVERAGE_MIN;
+  const limit = deps.limit ?? DEFAULT_DIGEST_LIMIT;
+
   const canonicals = [
     ...new Set(deps.dishes.flatMap((d) => d.ingredients.map((i) => i.canonical))),
   ];
@@ -20,22 +26,22 @@ export async function handleRecommend(deps: {
     matches.set(c, await deps.matcher.matchIngredient(c));
   }
 
-  const ranked = rankDishes(deps.dishes, matches).slice(0, topN);
-  if (ranked.length === 0 || ranked[0]?.onOfferCount === 0) {
-    return "На этой неделе выгодных совпадений по акциям не нашёл 😕";
+  const top = rankDishes(deps.dishes, matches)
+    .filter((r) => r.coverage >= coverageMin)
+    .slice(0, limit);
+
+  const pct = Math.round(coverageMin * 100);
+  if (top.length === 0) {
+    return `На этой неделе нет блюд, где хотя бы ${pct}% ингредиентов в акции 😕`;
   }
 
   const lines: string[] = ["🛒 Выгодно приготовить на этой неделе:\n"];
-  for (const r of ranked) {
+  for (const r of top) {
+    const total = r.dish.ingredients.length;
+    const keeps = r.dish.keepsDays ?? 1;
     lines.push(
-      `🍲 *${r.dish.nameRu}* — ${r.onOfferCount} ингр. на акции, ~${r.estTotal.toFixed(2)}€`
+      `🍲 *${r.dish.nameRu}* — ${r.onOfferCount}/${total} ингр. в акции · на ${r.dish.servings} порц. · ~${r.estTotal.toFixed(2)}€ · хранится ~${keeps} дн.`
     );
-    for (const item of buildShoppingList(r.dish, matches)) {
-      lines.push(
-        `   • ${item.ingredient}: ${item.product} — ${item.price.toFixed(2)}€ (${item.store})`
-      );
-    }
-    lines.push("");
   }
   return lines.join("\n").trim();
 }
