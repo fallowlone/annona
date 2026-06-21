@@ -29,7 +29,14 @@ export function createBot(deps: {
     await ctx.reply(text, { parse_mode: "Markdown" });
   };
 
-  bot.command("digest", recommend);
+  bot.command("digest", async (ctx) => {
+    try {
+      await recommend(ctx);
+    } catch (e) {
+      await ctx.reply("Упс, что-то пошло не так. Попробуй позже.");
+      console.error(e);
+    }
+  });
   bot.on("message:text", async (ctx) => {
     try {
       await recommend(ctx);

@@ -26,4 +26,7 @@ const bot = createBot({
   matcher,
 });
 console.log("Annona bot starting…");
-bot.start();
+bot.start().catch((e) => {
+  console.error("Bot failed to start:", e);
+  process.exit(1);
+});
