@@ -21,25 +21,46 @@ test("structured returns validated tool input", async () => {
 });
 
 test("structured retries once on invalid output then succeeds", async () => {
+  let calls = 0;
+  const client: LlmClient = {
+    messages: {
+      create: async () => {
+        calls++;
+        if (calls === 1) return { content: [{ type: "tool_use", name: "t", input: { wrong: true } }] };
+        return { content: [{ type: "tool_use", name: "t", input: { terms: ["Dill"] } }] };
+      },
+    },
+  };
   const llm = createLlm({
     apiKey: "x", model: "claude-haiku-4-5",
-    client: clientReturning([{ wrong: true }, { terms: ["Dill"] }]),
+    client,
   });
   const out = await llm.structured({
     prompt: "x", toolName: "t", description: "d",
     schema: z.object({ terms: z.array(z.string()) }),
   });
   expect(out.terms).toEqual(["Dill"]);
+  expect(calls).toBe(2);
 });
 
 test("structured throws after two invalid outputs", async () => {
+  let calls = 0;
+  const client: LlmClient = {
+    messages: {
+      create: async () => {
+        calls++;
+        return { content: [{ type: "tool_use", name: "t", input: { wrong: true } }] };
+      },
+    },
+  };
   const llm = createLlm({
     apiKey: "x", model: "claude-haiku-4-5",
-    client: clientReturning([{ wrong: true }]),
+    client,
   });
   await expect(
     llm.structured({ prompt: "x", toolName: "t", description: "d", schema: z.object({ terms: z.array(z.string()) }) })
   ).rejects.toThrow();
+  expect(calls).toBe(2);
 });
 
 test("structured retries when no tool_use block is present", async () => {
