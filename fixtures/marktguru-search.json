@@ -1,0 +1,18 @@
+{
+  "results": [
+    {
+      "id": 1001, "price": 1.49, "oldPrice": 1.99, "referencePrice": 1.49,
+      "description": "Schmand 24% Fett", "unit": { "shortName": "St" },
+      "product": { "name": "Schmand" }, "brand": { "name": "Gut & Günstig" },
+      "advertisers": [{ "name": "Edeka", "uniqueName": "edeka" }],
+      "validityDates": [{ "from": "2026-06-22T00:00:00", "to": "2026-06-28T00:00:00" }]
+    },
+    {
+      "id": 1002, "price": 0.99, "oldPrice": null, "referencePrice": 0.99,
+      "description": "Saure Sahne 10%", "unit": { "shortName": "St" },
+      "product": { "name": "Saure Sahne" }, "brand": { "name": "K-Classic" },
+      "advertisers": [{ "name": "Kaufland", "uniqueName": "kaufland" }],
+      "validityDates": [{ "from": "2026-06-22T00:00:00", "to": "2026-06-28T00:00:00" }]
+    }
+  ]
+}
