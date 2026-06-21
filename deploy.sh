@@ -14,21 +14,23 @@ set -euo pipefail
 HOST="${1:-home}"
 DEST="${2:-~/annona}"
 
-echo "→ Checking $HOST is reachable and has docker…"
-ssh "$HOST" 'docker --version && docker compose version' >/dev/null
+echo "-> Checking ${HOST} is reachable and has docker..."
+ssh "${HOST}" 'docker --version && docker compose version' >/dev/null
 
-echo "→ Syncing project to $HOST:$DEST (excluding build junk; .env IS sent)…"
+echo "-> Syncing project to ${HOST}:${DEST} (excluding build junk; .env IS sent)..."
 rsync -az --delete \
   --exclude node_modules --exclude .git --exclude data \
   --exclude .superpowers --exclude .claude --exclude .cursor \
-  ./ "$HOST:$DEST/"
+  ./ "${HOST}:${DEST}/"
 
-echo "→ Building & starting on $HOST…"
-ssh "$HOST" "cd $DEST && docker compose up -d --build"
+echo "-> Building and starting on ${HOST}..."
+ssh "${HOST}" "cd ${DEST} && docker compose up -d --build"
 
 echo
-echo "✓ Deployed."
-echo "  First time only — seed the dish DB:"
-echo "    ssh $HOST 'cd $DEST && docker compose run --rm annona bun run src/recipes/seed.ts'"
+echo "Deployed."
+echo "  First time only - seed the dish DB:"
+echo "    ssh ${HOST} 'cd ${DEST} && docker compose run --rm annona bun run src/recipes/seed.ts'"
+echo "  Reload dishes after seeding:"
+echo "    ssh ${HOST} 'cd ${DEST} && docker compose restart annona'"
 echo "  Tail logs:"
-echo "    ssh $HOST 'cd $DEST && docker compose logs -f'"
+echo "    ssh ${HOST} 'cd ${DEST} && docker compose logs -f'"
