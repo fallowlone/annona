@@ -1,0 +1,13 @@
+services:
+  annona:
+    build: .
+    image: annona:latest
+    container_name: annona
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # Persist the SQLite DB across rebuilds/restarts.
+      - annona-data:/app/data
+
+volumes:
+  annona-data:

@@ -5,7 +5,7 @@ import { seedDishes } from "./recipeStore";
 
 try {
   const cfg = loadConfig(Bun.env);
-  const db = openDb("annona.db");
+  const db = openDb("data/annona.db");
   const n = await seedDishes(
     db,
     createLlm({ apiKey: cfg.anthropicApiKey, model: cfg.llmModel }),

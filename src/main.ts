@@ -9,7 +9,7 @@ import { isoWeek } from "./util/week";
 import { createBot } from "./bot/bot";
 
 const cfg = loadConfig(Bun.env);
-const db = openDb("annona.db");
+const db = openDb("data/annona.db");
 const fetcher = createFetcher({ proxyMode: cfg.proxyMode });
 const keys = await loadKeys(fetcher);
 const provider = createMarktguruProvider({ fetcher, zipCode: cfg.locationPlz, keys });
