@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { MIGRATIONS } from "./migrations";
+import { MIGRATIONS, applyColumnMigrations } from "./migrations";
 
 export function openDb(path: string): Database {
   // Ensure the DB file's parent dir exists (e.g. data/ for a mounted volume).
@@ -11,5 +11,6 @@ export function openDb(path: string): Database {
   db.run("PRAGMA journal_mode = WAL;");
   db.run("PRAGMA foreign_keys = ON;");
   for (const stmt of MIGRATIONS) db.run(stmt);
+  applyColumnMigrations(db);
   return db;
 }

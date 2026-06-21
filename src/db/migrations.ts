@@ -1,3 +1,30 @@
+import type { Database } from "bun:sqlite";
+
+type ColumnMigration = { table: string; column: string; ddl: string };
+
+// Additive column migrations applied after the CREATE TABLE statements.
+// Each is guarded by a PRAGMA existence check so re-running on an already
+// upgraded (e.g. deployed) DB never throws "duplicate column name".
+export const COLUMN_MIGRATIONS: ColumnMigration[] = [
+  {
+    table: "dishes",
+    column: "course",
+    ddl: "ALTER TABLE dishes ADD COLUMN course TEXT CHECK(course IN ('first','second'))",
+  },
+  {
+    table: "dishes",
+    column: "keeps_days",
+    ddl: "ALTER TABLE dishes ADD COLUMN keeps_days INTEGER NOT NULL DEFAULT 1",
+  },
+];
+
+export function applyColumnMigrations(db: Database): void {
+  for (const m of COLUMN_MIGRATIONS) {
+    const cols = db.query(`PRAGMA table_info(${m.table})`).all() as { name: string }[];
+    if (!cols.some((c) => c.name === m.column)) db.run(m.ddl);
+  }
+}
+
 export const MIGRATIONS: string[] = [
   `CREATE TABLE IF NOT EXISTS dishes (
      id INTEGER PRIMARY KEY AUTOINCREMENT,

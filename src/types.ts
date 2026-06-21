@@ -23,6 +23,8 @@ export type Dish = {
   nameUa: string | null;
   nameDe: string | null;
   cuisine: string; // 'ru' | 'ua'
+  course?: "first" | "second" | null; // soup/porridge = first, main = second
+  keepsDays?: number; // days the cooked dish keeps; default 1
   tags: string[];
   servings: number;
   ingredients: Ingredient[];

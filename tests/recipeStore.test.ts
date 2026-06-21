@@ -6,6 +6,7 @@ import type { Llm } from "../src/llm/llm";
 
 const borscht: Dish = {
   nameRu: "Борщ", nameUa: "Борщ", nameDe: "Borschtsch", cuisine: "ua",
+  course: "first", keepsDays: 4,
   tags: ["soup"], servings: 4,
   ingredients: [
     { canonical: "свёкла", qty: 2, unit: "шт" },
@@ -16,6 +17,7 @@ const borscht: Dish = {
 
 const pelmeni: Dish = {
   nameRu: "Пельмени", nameUa: "Вареники", nameDe: "Pelmeni", cuisine: "ru",
+  course: "second", keepsDays: 2,
   tags: ["main"], servings: 2,
   ingredients: [
     { canonical: "фарш", qty: 0.5, unit: "кг" },
@@ -112,4 +114,25 @@ test("transactional rollback: failed ingredient insert leaves no orphan dish", (
   expect(() => insertDish(db, borscht)).toThrow();
   const rows = db.query("SELECT * FROM dishes").all();
   expect(rows).toHaveLength(0);
+});
+
+test("insertDish + listDishes round-trips course and keepsDays", () => {
+  const db = openDb(":memory:");
+  insertDish(db, borscht);
+  const all = listDishes(db);
+  expect(all[0]!.course).toBe("first");
+  expect(all[0]!.keepsDays).toBe(4);
+});
+
+test("insertDish defaults missing metadata to null course and keepsDays 1", () => {
+  const db = openDb(":memory:");
+  const bare: Dish = {
+    nameRu: "Каша", nameUa: null, nameDe: null, cuisine: "ru",
+    tags: [], servings: 2,
+    ingredients: [{ canonical: "крупа", qty: 1, unit: "кг" }],
+  };
+  insertDish(db, bare);
+  const all = listDishes(db);
+  expect(all[0]!.course).toBeNull();
+  expect(all[0]!.keepsDays).toBe(1);
 });

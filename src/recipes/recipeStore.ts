@@ -16,6 +16,8 @@ const DishSchema = z.object({
   nameUa: z.string().nullable(),
   nameDe: z.string().nullable(),
   cuisine: z.string().min(1),
+  course: z.enum(["first", "second"]),
+  keepsDays: z.number().int().positive(),
   tags: z.array(z.string()),
   servings: z.number().int().positive(),
   ingredients: z.array(IngredientSchema).min(1),
@@ -34,6 +36,8 @@ type DishRow = {
   name_ua: string | null;
   name_de: string | null;
   cuisine: string;
+  course: "first" | "second" | null;
+  keeps_days: number;
   tags: string;
   servings: number;
 };
@@ -50,15 +54,17 @@ type IngredientRow = {
 export function insertDish(db: Database, dish: Dish): number {
   const insert = db.transaction(() => {
     const row = db
-      .query<{ id: number }, [string, string | null, string | null, string, string, number]>(
-        `INSERT INTO dishes(name_ru, name_ua, name_de, cuisine, tags, servings)
-         VALUES(?, ?, ?, ?, ?, ?) RETURNING id`
+      .query<{ id: number }, [string, string | null, string | null, string, string | null, number, string, number]>(
+        `INSERT INTO dishes(name_ru, name_ua, name_de, cuisine, course, keeps_days, tags, servings)
+         VALUES(?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`
       )
       .get(
         dish.nameRu,
         dish.nameUa ?? null,
         dish.nameDe ?? null,
         dish.cuisine,
+        dish.course ?? null,
+        dish.keepsDays ?? 1,
         JSON.stringify(dish.tags),
         dish.servings
       );
@@ -81,7 +87,9 @@ export function insertDish(db: Database, dish: Dish): number {
 /** Return all dishes ordered by id, each with their ingredients. */
 export function listDishes(db: Database): Dish[] {
   const dishRows = db
-    .query<DishRow, []>(`SELECT id, name_ru, name_ua, name_de, cuisine, tags, servings FROM dishes ORDER BY id`)
+    .query<DishRow, []>(
+      `SELECT id, name_ru, name_ua, name_de, cuisine, course, keeps_days, tags, servings FROM dishes ORDER BY id`
+    )
     .all();
 
   const ingQ = db.query<IngredientRow, [number]>(
@@ -94,6 +102,8 @@ export function listDishes(db: Database): Dish[] {
     nameUa: r.name_ua,
     nameDe: r.name_de,
     cuisine: r.cuisine,
+    course: r.course,
+    keepsDays: r.keeps_days,
     tags: JSON.parse(r.tags) as string[],
     servings: r.servings,
     ingredients: ingQ.all(r.id).map((i) => ({
