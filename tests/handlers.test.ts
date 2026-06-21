@@ -46,11 +46,11 @@ test("handleRecommend respects topN parameter", async () => {
   };
   const dishes: Dish[] = [
     {
-      nameRu: "Салат", nameUa: null, nameDe: null, cuisine: "ru", tags: [], servings: 2,
+      nameRu: "Салат", nameUa: null, nameDe: null, cuisine: "ru", tags: [], servings: 2, keepsDays: 3,
       ingredients: [{ canonical: "помидор", qty: 2, unit: "шт" }, { canonical: "огурец", qty: 1, unit: "шт" }],
     },
     {
-      nameRu: "Суп", nameUa: null, nameDe: null, cuisine: "ru", tags: [], servings: 4,
+      nameRu: "Суп", nameUa: null, nameDe: null, cuisine: "ru", tags: [], servings: 4, keepsDays: 1,
       ingredients: [{ canonical: "лук", qty: 1, unit: "шт" }],
     },
   ];
