@@ -17,10 +17,10 @@ export function createMatcher(deps: {
   db: Database;
   llm: Llm;
   provider: OfferProvider;
-  week: string;
+  week: () => string;
   whitelist?: ReadonlySet<StoreKey>;
 }): Matcher {
-  const { db, llm, provider, week, whitelist } = deps;
+  const { db, llm, provider, whitelist } = deps;
 
   async function searchTerms(canonical: string): Promise<string[]> {
     const row = db
@@ -44,6 +44,7 @@ export function createMatcher(deps: {
   }
 
   async function matchIngredient(canonical: string): Promise<Offer | null> {
+    const week = deps.week();
     const cached = db
       .query(
         "SELECT offer_json FROM match_cache WHERE ingredient_canonical = ? AND week = ?"

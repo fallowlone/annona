@@ -16,7 +16,7 @@ const keys = await loadKeys(fetcher);
 const provider = createMarktguruProvider({ fetcher, zipCode: cfg.locationPlz, keys });
 const llm = createLlm({ apiKey: cfg.anthropicApiKey, model: cfg.llmModel });
 const whitelist = new Set<StoreKey>(cfg.storeWhitelist);
-const matcher = createMatcher({ db, llm, provider, week: isoWeek(new Date()), whitelist });
+const matcher = createMatcher({ db, llm, provider, week: () => isoWeek(new Date()), whitelist });
 const dishes = listDishes(db);
 
 if (dishes.length === 0) console.warn("No dishes yet — run `bun run seed` first.");

@@ -52,7 +52,7 @@ export function createBot(deps: {
       await fn(ctx);
     } catch (e) {
       await ctx.reply("Упс, что-то пошло не так. Попробуй позже.");
-      console.error(e);
+      console.error("Handler error for user", ctx.from?.id, e);
     }
   };
 
