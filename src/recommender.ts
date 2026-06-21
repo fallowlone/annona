@@ -20,10 +20,16 @@ export function rankDishes(
         estTotal += m.price;
       }
     }
-    return { dish, onOfferCount, estTotal };
+    const total = dish.ingredients.length;
+    const coverage = total === 0 ? 0 : onOfferCount / total;
+    return { dish, onOfferCount, estTotal, coverage };
   });
-  return ranked.sort((a, b) =>
-    b.onOfferCount - a.onOfferCount || a.estTotal - b.estTotal
+  // Favour fully-coverable dishes, then long-keeping ones (cook rarely), then cheap.
+  return ranked.sort(
+    (a, b) =>
+      b.coverage - a.coverage ||
+      (b.dish.keepsDays ?? 1) - (a.dish.keepsDays ?? 1) ||
+      a.estTotal - b.estTotal
   );
 }
 

@@ -34,6 +34,7 @@ export type RankedDish = {
   dish: Dish;
   onOfferCount: number;
   estTotal: number;
+  coverage: number; // onOfferCount / ingredientCount, 0..1
 };
 
 export type ShoppingItem = {

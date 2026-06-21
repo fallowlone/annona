@@ -141,3 +141,42 @@ test("rankDishes with a dish with no ingredients", () => {
   expect(ranked[0]!.onOfferCount).toBe(0);
   expect(ranked[0]!.estTotal).toBe(0);
 });
+
+const dishK = (nameRu: string, ings: string[], keepsDays: number): Dish => ({
+  ...dish(nameRu, ings),
+  keepsDays,
+});
+
+test("rankDishes ranks by coverage DESC over raw on-offer count", () => {
+  const matches = new Map<string, Offer | null>([
+    ["a", offer({ price: 1 })],
+    ["b", offer({ price: 1 })],
+    ["c", offer({ price: 1 })],
+    ["d", offer({ price: 1 })],
+    ["e", null],
+  ]);
+  // Full: 2/2 = 1.0 coverage. Partial: 3/4 = 0.75 coverage (more on offer, lower ratio).
+  const ranked = rankDishes(
+    [dish("Partial", ["a", "b", "c", "e"]), dish("Full", ["a", "b"])],
+    matches
+  );
+  expect(ranked[0]!.dish.nameRu).toBe("Full");
+  expect(ranked[0]!.coverage).toBe(1);
+  expect(ranked[1]!.dish.nameRu).toBe("Partial");
+  expect(ranked[1]!.coverage).toBe(0.75);
+});
+
+test("rankDishes breaks coverage ties by keepsDays DESC", () => {
+  const matches = new Map<string, Offer | null>([["x", offer({ price: 5 })]]);
+  const ranked = rankDishes(
+    [dishK("Short", ["x"], 1), dishK("Long", ["x"], 5)],
+    matches
+  );
+  expect(ranked[0]!.dish.nameRu).toBe("Long");
+  expect(ranked[1]!.dish.nameRu).toBe("Short");
+});
+
+test("rankDishes coverage is 0 for a dish with no ingredients", () => {
+  const ranked = rankDishes([dish("Empty", [])], new Map());
+  expect(ranked[0]!.coverage).toBe(0);
+});
