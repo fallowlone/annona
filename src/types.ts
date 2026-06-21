@@ -43,3 +43,6 @@ export type ShoppingItem = {
   product: string;
   price: number;
 };
+
+export type MenuDay = { day: number; first: Dish | null; second: Dish | null };
+export type WeeklyMenu = { days: MenuDay[] };
