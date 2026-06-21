@@ -26,6 +26,10 @@ const bot = createBot({
   allowedUserIds: cfg.allowedUserIds,
   dishes,
   matcher,
+  llm,
+  db,
+  plz: cfg.locationPlz,
+  menuDays: cfg.menuDays,
   coverageMin: cfg.offerCoverageMin,
   digestLimit: cfg.digestLimit,
 });
