@@ -32,5 +32,16 @@ test("dedupeOffers keeps cheapest per externalId", () => {
     mk({ externalId: 8, referencePrice: 5 }),
   ]);
   expect(out).toHaveLength(2);
-  expect(out.find((o) => o.externalId === 7)!.referencePrice).toBe(2);
+  const kept = out.find((o) => o.externalId === 7);
+  expect(kept).toBeDefined();
+  expect(kept?.referencePrice).toBe(2);
+});
+
+test("dedupeOffers handles empty array", () => {
+  const out = dedupeOffers([]);
+  expect(out).toEqual([]);
+});
+
+test("cleanName collapses tabs and newlines", () => {
+  expect(cleanName("\tfoo\n\tbar")).toBe("foo bar");
 });
