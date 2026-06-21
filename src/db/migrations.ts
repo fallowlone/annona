@@ -53,4 +53,9 @@ export const MIGRATIONS: string[] = [
      unit TEXT, valid_from TEXT, valid_to TEXT, fetched_at TEXT, is_stale INTEGER DEFAULT 0
    );`,
   `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`,
+  `CREATE TABLE IF NOT EXISTS selection (
+     week TEXT PRIMARY KEY,
+     dish_ids_json TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );`,
 ];

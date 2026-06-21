@@ -39,3 +39,8 @@ test("parses custom coverage and digest limit", () => {
   expect(cfg.offerCoverageMin).toBe(0.5);
   expect(cfg.digestLimit).toBe(3);
 });
+
+test("applies MENU_DAYS default and parses a custom value", () => {
+  expect(loadConfig(base).menuDays).toBe(7);
+  expect(loadConfig({ ...base, MENU_DAYS: "5" }).menuDays).toBe(5);
+});

@@ -27,6 +27,7 @@ const schema = z.object({
     .pipe(z.array(z.enum(STORE_KEYS)).min(1)),
   OFFER_COVERAGE_MIN: z.coerce.number().min(0).max(1).default(0.7),
   DIGEST_LIMIT: z.coerce.number().int().positive().default(5),
+  MENU_DAYS: z.coerce.number().int().positive().default(7),
 });
 
 export type ProxyMode = "none" | "pool" | "service";
@@ -42,6 +43,7 @@ export type Config = {
   storeWhitelist: StoreKey[];
   offerCoverageMin: number;
   digestLimit: number;
+  menuDays: number;
 };
 
 export function loadConfig(env: Record<string, string | undefined>): Config {
@@ -57,5 +59,6 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     storeWhitelist: p.STORE_WHITELIST,
     offerCoverageMin: p.OFFER_COVERAGE_MIN,
     digestLimit: p.DIGEST_LIMIT,
+    menuDays: p.MENU_DAYS,
   };
 }
