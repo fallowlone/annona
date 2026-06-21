@@ -21,7 +21,7 @@ export async function handleRecommend(deps: {
   }
 
   const ranked = rankDishes(deps.dishes, matches).slice(0, topN);
-  if (ranked.length === 0 || ranked[0].onOfferCount === 0) {
+  if (ranked.length === 0 || ranked[0]?.onOfferCount === 0) {
     return "На этой неделе выгодных совпадений по акциям не нашёл 😕";
   }
 

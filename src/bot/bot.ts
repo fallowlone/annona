@@ -1,4 +1,4 @@
-import { Bot } from "grammy";
+import { Bot, type Context } from "grammy";
 import type { Dish } from "../types";
 import type { Matcher } from "../matcher";
 import { isAllowed, handleRecommend } from "./handlers";
@@ -22,9 +22,7 @@ export function createBot(deps: {
     )
   );
 
-  const recommend = async (ctx: {
-    reply: (t: string, o?: unknown) => Promise<unknown>;
-  }) => {
+  const recommend = async (ctx: Context) => {
     const text = await handleRecommend({ dishes: deps.dishes, matcher: deps.matcher });
     await ctx.reply(text, { parse_mode: "Markdown" });
   };

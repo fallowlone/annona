@@ -27,7 +27,11 @@ export function createLlm(deps: { apiKey: string; model: string; client?: LlmCli
     description: string;
     schema: z.ZodType<T>;
   }): Promise<T> {
-    const inputSchema = zodToJsonSchema(a.schema, { target: "jsonSchema7" });
+    // zod-to-json-schema expects zod/v3's ZodSchema, but this project uses zod v4.
+    // The runtime call works fine; the cast through unknown resolves the structural
+    // type mismatch between the two versions without touching the exported signature.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const inputSchema = zodToJsonSchema(a.schema as unknown as any, { target: "jsonSchema7" });
     const res = await client.messages.create({
       model: deps.model,
       max_tokens: 1024,

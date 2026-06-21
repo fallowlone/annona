@@ -39,10 +39,10 @@ test("rankDishes orders by on-offer count DESC", () => {
     ],
     matches
   );
-  expect(ranked[0].dish.nameRu).toBe("Пюре");
-  expect(ranked[0].onOfferCount).toBe(2);
-  expect(ranked[1].dish.nameRu).toBe("Окрошка");
-  expect(ranked[1].onOfferCount).toBe(0);
+  expect(ranked[0]!.dish.nameRu).toBe("Пюре");
+  expect(ranked[0]!.onOfferCount).toBe(2);
+  expect(ranked[1]!.dish.nameRu).toBe("Окрошка");
+  expect(ranked[1]!.onOfferCount).toBe(0);
 });
 
 test("rankDishes tie-break by estTotal ASC", () => {
@@ -59,11 +59,11 @@ test("rankDishes tie-break by estTotal ASC", () => {
     ],
     matches
   );
-  expect(ranked[0].dish.nameRu).toBe("Cheap");
-  expect(ranked[0].onOfferCount).toBe(2);
-  expect(ranked[0].estTotal).toBe(3);
-  expect(ranked[1].dish.nameRu).toBe("Expensive");
-  expect(ranked[1].estTotal).toBe(8);
+  expect(ranked[0]!.dish.nameRu).toBe("Cheap");
+  expect(ranked[0]!.onOfferCount).toBe(2);
+  expect(ranked[0]!.estTotal).toBe(3);
+  expect(ranked[1]!.dish.nameRu).toBe("Expensive");
+  expect(ranked[1]!.estTotal).toBe(8);
 });
 
 test("rankDishes with a null match", () => {
@@ -72,8 +72,8 @@ test("rankDishes with a null match", () => {
     ["укроп", null],
   ]);
   const ranked = rankDishes([dish("X", ["сметана", "укроп"])], matches);
-  expect(ranked[0].onOfferCount).toBe(1);
-  expect(ranked[0].estTotal).toBe(1);
+  expect(ranked[0]!.onOfferCount).toBe(1);
+  expect(ranked[0]!.estTotal).toBe(1);
 });
 
 test("rankDishes estTotal uses effectiveUnitPrice (referencePrice ?? price)", () => {
@@ -88,7 +88,7 @@ test("rankDishes estTotal uses effectiveUnitPrice (referencePrice ?? price)", ()
     ],
   ]);
   const ranked = rankDishes([dish("X", ["масло"])], matches);
-  expect(ranked[0].estTotal).toBe(6); // must be 6 (referencePrice), not 10 (price)
+  expect(ranked[0]!.estTotal).toBe(6); // must be 6 (referencePrice), not 10 (price)
 });
 
 test("buildShoppingList creates items from matches", () => {
@@ -105,10 +105,10 @@ test("buildShoppingList creates items from matches", () => {
   ]);
   const list = buildShoppingList(dish("X", ["сметана", "укроп"]), matches);
   expect(list).toHaveLength(1);
-  expect(list[0].ingredient).toBe("сметана");
-  expect(list[0].store).toBe("Kaufland");
-  expect(list[0].product).toBe("Schmand");
-  expect(list[0].price).toBe(0.99);
+  expect(list[0]!.ingredient).toBe("сметана");
+  expect(list[0]!.store).toBe("Kaufland");
+  expect(list[0]!.product).toBe("Schmand");
+  expect(list[0]!.price).toBe(0.99);
 });
 
 test("buildShoppingList uses effectiveUnitPrice (referencePrice ?? price)", () => {
@@ -125,7 +125,7 @@ test("buildShoppingList uses effectiveUnitPrice (referencePrice ?? price)", () =
   ]);
   const list = buildShoppingList(dish("X", ["сметана"]), matches);
   expect(list).toHaveLength(1);
-  expect(list[0].price).toBe(2.49); // must be 2.49 (referencePrice), not 3.29 (price)
+  expect(list[0]!.price).toBe(2.49); // must be 2.49 (referencePrice), not 3.29 (price)
 });
 
 test("rankDishes with empty dish list", () => {
@@ -138,6 +138,6 @@ test("rankDishes with a dish with no ingredients", () => {
   const matches = new Map<string, Offer | null>();
   const ranked = rankDishes([dish("Empty", [])], matches);
   expect(ranked).toHaveLength(1);
-  expect(ranked[0].onOfferCount).toBe(0);
-  expect(ranked[0].estTotal).toBe(0);
+  expect(ranked[0]!.onOfferCount).toBe(0);
+  expect(ranked[0]!.estTotal).toBe(0);
 });

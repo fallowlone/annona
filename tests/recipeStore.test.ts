@@ -77,9 +77,9 @@ test("seedDishes calls the injected Llm and inserts returned dishes", async () =
   const db = openDb(":memory:");
 
   const fakeLlm: Llm = {
-    structured: async () => ({
-      dishes: [borscht, pelmeni],
-    }),
+    async structured<T>(): Promise<T> {
+      return { dishes: [borscht, pelmeni] } as unknown as T;
+    },
   };
 
   const n = await seedDishes(db, fakeLlm, 2);
@@ -96,7 +96,9 @@ test("seedDishes inserts all ingredients for seeded dishes", async () => {
   const db = openDb(":memory:");
 
   const fakeLlm: Llm = {
-    structured: async () => ({ dishes: [borscht] }),
+    async structured<T>(): Promise<T> {
+      return { dishes: [borscht] } as unknown as T;
+    },
   };
 
   await seedDishes(db, fakeLlm, 1);
