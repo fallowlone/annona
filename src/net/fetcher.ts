@@ -23,7 +23,7 @@ export function createFetcher(opts?: {
   proxyMode?: "none" | "pool" | "service";
 }): Fetcher {
   const doFetch = opts?.fetchImpl ?? fetch;
-  const sleep = opts?.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const sleep = opts?.sleep ?? ((ms: number) => Bun.sleep(ms));
   const mode = opts?.proxyMode ?? "none";
   if (mode !== "none") throw new Error(`proxy mode '${mode}' not configured yet`);
 
@@ -42,22 +42,26 @@ export function createFetcher(opts?: {
     const full = buildUrl(url, reqOpts?.query);
     let lastErr: unknown;
     for (let attempt = 0; attempt <= retries; attempt++) {
-      const res = await doFetch(full, {
-        headers: {
-          "User-Agent": nextUa(),
-          Accept: "application/json",
-          ...(reqOpts?.headers ?? {}),
-        },
-      });
-      if (RETRYABLE.has(res.status)) {
-        lastErr = new Error(`HTTP ${res.status}`);
+      try {
+        const res = await doFetch(full, {
+          headers: { "User-Agent": nextUa(), Accept: "application/json", ...(reqOpts?.headers ?? {}) },
+        });
+        if (RETRYABLE.has(res.status)) {
+          lastErr = new Error(`HTTP ${res.status}`);
+          await sleep(Math.pow(2, attempt) * 250 + Math.random() * 150);
+          continue;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`); // permanent client error — do not retry
+        return res;
+      } catch (e) {
+        // Permanent HTTP errors (thrown just above) must not be retried.
+        if (e instanceof Error && e.message.startsWith("HTTP ")) throw e;
+        // Genuine network-level failure (DNS / connection refused) — retry with backoff.
+        lastErr = e;
         await sleep(Math.pow(2, attempt) * 250 + Math.random() * 150);
-        continue;
       }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res;
     }
-    throw new Error(`request failed after ${retries} retries for ${url}: ${String(lastErr)}`);
+    throw new Error(`request failed for ${url}: ${String(lastErr)}`);
   }
 
   return {

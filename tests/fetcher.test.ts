@@ -6,7 +6,7 @@ function fakeFetch(sequence: Array<{ status: number; body: string }>) {
   const calls: Array<{ url: string; headers: Record<string, string> }> = [];
   const impl = (async (url: string, init?: RequestInit) => {
     calls.push({ url, headers: (init?.headers as Record<string, string>) ?? {} });
-    const r = sequence[Math.min(i, sequence.length - 1)];
+    const r = sequence[Math.min(i, sequence.length - 1)]!;
     i++;
     return new Response(r.body, { status: r.status });
   }) as unknown as typeof fetch;
@@ -26,9 +26,10 @@ test("retries on 429 then succeeds, sending a User-Agent", async () => {
 });
 
 test("throws after exhausting retries", async () => {
-  const { impl } = fakeFetch([{ status: 503, body: "" }]);
+  const { impl, calls } = fakeFetch([{ status: 503, body: "" }]);
   const f = createFetcher({ fetchImpl: impl, sleep: async () => {} });
   await expect(f.getJson("https://x.test/a", { retries: 2 })).rejects.toThrow();
+  expect(calls.length).toBe(3);
 });
 
 test("appends query params", async () => {
@@ -44,6 +45,21 @@ test("does not retry on non-retryable status (404)", async () => {
   const f = createFetcher({ fetchImpl: impl, sleep: async () => {} });
   await expect(f.getJson("https://x.test/a", { retries: 3 })).rejects.toThrow("HTTP 404");
   expect(calls.length).toBe(1);
+});
+
+test("retries network-level throws (ECONNREFUSED) then succeeds", async () => {
+  let callCount = 0;
+  const calls: string[] = [];
+  const impl = (async (url: string) => {
+    calls.push(url);
+    callCount++;
+    if (callCount === 1) throw new Error("ECONNREFUSED");
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  }) as unknown as typeof fetch;
+  const f = createFetcher({ fetchImpl: impl, sleep: async () => {} });
+  const out = await f.getJson<{ ok: boolean }>("https://x.test/a");
+  expect(out.ok).toBe(true);
+  expect(calls.length).toBe(2);
 });
 
 test("getText returns body as string", async () => {
