@@ -7,6 +7,7 @@ import { createMatcher } from "./matcher";
 import { listDishes } from "./recipes/recipeStore";
 import { isoWeek } from "./util/week";
 import { createBot } from "./bot/bot";
+import type { StoreKey } from "./stores";
 
 const cfg = loadConfig(Bun.env);
 const db = openDb("data/annona.db");
@@ -14,7 +15,8 @@ const fetcher = createFetcher({ proxyMode: cfg.proxyMode });
 const keys = await loadKeys(fetcher);
 const provider = createMarktguruProvider({ fetcher, zipCode: cfg.locationPlz, keys });
 const llm = createLlm({ apiKey: cfg.anthropicApiKey, model: cfg.llmModel });
-const matcher = createMatcher({ db, llm, provider, week: isoWeek(new Date()) });
+const whitelist = new Set<StoreKey>(cfg.storeWhitelist);
+const matcher = createMatcher({ db, llm, provider, week: isoWeek(new Date()), whitelist });
 const dishes = listDishes(db);
 
 if (dishes.length === 0) console.warn("No dishes yet — run `bun run seed` first.");
@@ -24,6 +26,8 @@ const bot = createBot({
   allowedUserIds: cfg.allowedUserIds,
   dishes,
   matcher,
+  coverageMin: cfg.offerCoverageMin,
+  digestLimit: cfg.digestLimit,
 });
 console.log("Annona bot starting…");
 bot.start().catch((e) => {

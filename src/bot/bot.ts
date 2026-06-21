@@ -8,6 +8,8 @@ export function createBot(deps: {
   allowedUserIds: number[];
   dishes: Dish[];
   matcher: Matcher;
+  coverageMin?: number;
+  digestLimit?: number;
 }): Bot {
   const bot = new Bot(deps.token);
 
@@ -26,7 +28,12 @@ export function createBot(deps: {
   );
 
   const recommend = async (ctx: Context) => {
-    const text = await handleRecommend({ dishes: deps.dishes, matcher: deps.matcher });
+    const text = await handleRecommend({
+      dishes: deps.dishes,
+      matcher: deps.matcher,
+      coverageMin: deps.coverageMin,
+      limit: deps.digestLimit,
+    });
     await ctx.reply(text, { parse_mode: "Markdown" });
   };
 
