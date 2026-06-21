@@ -136,3 +136,30 @@ test("insertDish defaults missing metadata to null course and keepsDays 1", () =
   expect(all[0]!.course).toBeNull();
   expect(all[0]!.keepsDays).toBe(1);
 });
+
+test("seedDishes is idempotent: a second run with the target already met adds nothing", async () => {
+  const db = openDb(":memory:");
+  const fakeLlm: Llm = {
+    async structured<T>(): Promise<T> {
+      return { dishes: [borscht, pelmeni] } as unknown as T;
+    },
+  };
+  const first = await seedDishes(db, fakeLlm, 2);
+  expect(first).toBe(2);
+  const second = await seedDishes(db, fakeLlm, 2);
+  expect(second).toBe(0);
+  expect(listDishes(db)).toHaveLength(2);
+});
+
+test("seedDishes only adds dishes missing from the existing catalogue", async () => {
+  const db = openDb(":memory:");
+  insertDish(db, borscht); // already present
+  const fakeLlm: Llm = {
+    async structured<T>(): Promise<T> {
+      return { dishes: [borscht, pelmeni] } as unknown as T;
+    },
+  };
+  const added = await seedDishes(db, fakeLlm, 2);
+  expect(added).toBe(1); // borscht skipped, pelmeni added
+  expect(listDishes(db).map((d) => d.nameRu).sort()).toEqual(["Борщ", "Пельмени"]);
+});

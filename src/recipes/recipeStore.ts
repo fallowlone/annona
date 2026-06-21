@@ -127,39 +127,48 @@ export function getIngredients(db: Database, dishId: number): Ingredient[] {
 // ── LLM seeding ───────────────────────────────────────────────────────────
 
 /**
- * Ask the LLM for `count` dishes, validate the response with DishSeedSchema,
- * insert each dish transactionally, and return the number inserted.
+ * Grow the dish catalogue to `target` total dishes, idempotently. Existing
+ * dishes (by name_ru) are never duplicated; only missing dishes are generated.
+ * Seeds in small batches because one call for many dishes overflows the model's
+ * output-token budget. Returns the number of NEW dishes inserted.
  */
-export async function seedDishes(db: Database, llm: Llm, count: number): Promise<number> {
-  // Seed in small batches: a single call for ~30 dishes overflows the model's
-  // output-token budget and the truncated tool JSON arrives unusable ("dishes"
-  // undefined). Batching keeps each response small; we dedupe by nameRu and stop
-  // as soon as the model stops producing anything new, so we never loop forever.
+export async function seedDishes(db: Database, llm: Llm, target: number): Promise<number> {
+  const existing = db.query("SELECT name_ru FROM dishes").all() as { name_ru: string }[];
+  const seen = new Set<string>(existing.map((r) => r.name_ru));
+  const need = Math.max(0, target - seen.size);
+
   const BATCH = 8;
-  const seen = new Set<string>();
-  let n = 0;
-  while (n < count) {
-    const want = Math.min(BATCH, count - n);
+  let added = 0;
+  while (added < need) {
+    const want = Math.min(BATCH, need - added);
     const exclude =
-      seen.size > 0 ? ` Do NOT repeat any of these already-chosen dishes: ${[...seen].join(", ")}.` : "";
+      seen.size > 0
+        ? ` Do NOT repeat any of these already-known dishes: ${[...seen].join(", ")}.`
+        : "";
     const out = await llm.structured({
-      system: "You are a chef cataloguing Ukrainian and Russian home dishes makeable in Germany.",
-      prompt: `Return ${want} popular Ukrainian/Russian dishes.${exclude} For each provide: nameRu, nameUa, nameDe, cuisine ('ru'|'ua'), tags (array of strings), servings (integer), and ingredients with canonical Russian names, qty (number or null) and unit (string or null). Use ingredients buyable in German supermarkets.`,
+      system:
+        "You are a chef cataloguing home dishes a CIS family can cook in Germany: mostly Ukrainian and Russian classics, plus globally popular dishes (lasagne, carbonara, etc.).",
+      prompt:
+        `Return ${want} popular dishes.${exclude} For each provide: nameRu, nameUa (or null), ` +
+        `nameDe (or null), cuisine (short code like 'ru'|'ua'|'it'), course ('first' for soups/porridge, ` +
+        `'second' for mains), keepsDays (integer 1-5: how many days the cooked dish keeps in a fridge), ` +
+        `tags (array of strings), servings (integer), and ingredients with canonical Russian names, ` +
+        `qty (number or null) and unit (string or null). Use ingredients buyable in German supermarkets.`,
       toolName: "save_dishes",
       description: "Persist the generated dish catalogue",
       schema: DishSeedSchema,
       maxTokens: 4096,
     });
-    let added = 0;
+    let batchAdded = 0;
     for (const dish of out.dishes) {
       if (seen.has(dish.nameRu)) continue;
       seen.add(dish.nameRu);
       insertDish(db, dish);
-      n++;
       added++;
-      if (n >= count) break;
+      batchAdded++;
+      if (added >= need) break;
     }
-    if (added === 0) break; // model produced nothing new — stop rather than loop forever
+    if (batchAdded === 0) break; // model produced nothing new — stop rather than loop forever
   }
-  return n;
+  return added;
 }
