@@ -14,3 +14,10 @@ test("openDb creates all tables and supports a roundtrip", () => {
   const row = db.query("SELECT value FROM meta WHERE key='k'").get() as { value: string };
   expect(row.value).toBe("v");
 });
+
+test("foreign keys are enforced", () => {
+  const db = openDb(":memory:");
+  expect(() =>
+    db.run("INSERT INTO ingredients(dish_id, canonical_name) VALUES(999, 'salt')")
+  ).toThrow();
+});
