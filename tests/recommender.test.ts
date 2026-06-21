@@ -76,19 +76,19 @@ test("rankDishes with a null match", () => {
   expect(ranked[0]!.estTotal).toBe(1);
 });
 
-test("rankDishes estTotal uses effectiveUnitPrice (referencePrice ?? price)", () => {
+test("rankDishes estTotal uses package price, not the €/kg Grundpreis referencePrice", () => {
   const matches = new Map<string, Offer | null>([
     [
       "масло",
       offer({
-        price: 10,
-        referencePrice: 6, // effective price is 6, not 10
+        price: 10, // shelf price the family pays
+        referencePrice: 6, // Grundpreis (€/kg) — must NOT be used for the total
         storeName: "Kaufland",
       }),
     ],
   ]);
   const ranked = rankDishes([dish("X", ["масло"])], matches);
-  expect(ranked[0]!.estTotal).toBe(6); // must be 6 (referencePrice), not 10 (price)
+  expect(ranked[0]!.estTotal).toBe(10); // package price, not 6 (€/kg Grundpreis)
 });
 
 test("buildShoppingList creates items from matches", () => {
@@ -111,21 +111,21 @@ test("buildShoppingList creates items from matches", () => {
   expect(list[0]!.price).toBe(0.99);
 });
 
-test("buildShoppingList uses effectiveUnitPrice (referencePrice ?? price)", () => {
+test("buildShoppingList shows the shelf price, not the €/kg Grundpreis referencePrice", () => {
   const matches = new Map<string, Offer | null>([
     [
       "сметана",
       offer({
         storeName: "Aldi",
         product: "Sauerrahm",
-        price: 3.29,
-        referencePrice: 2.49, // effective price is 2.49, not 3.29
+        price: 3.29, // shelf price the family pays
+        referencePrice: 2.49, // Grundpreis (€/kg) — must NOT be shown
       }),
     ],
   ]);
   const list = buildShoppingList(dish("X", ["сметана"]), matches);
   expect(list).toHaveLength(1);
-  expect(list[0]!.price).toBe(2.49); // must be 2.49 (referencePrice), not 3.29 (price)
+  expect(list[0]!.price).toBe(3.29); // shelf price, not 2.49 (€/kg Grundpreis)
 });
 
 test("rankDishes with empty dish list", () => {
