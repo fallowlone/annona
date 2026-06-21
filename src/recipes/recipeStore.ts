@@ -121,21 +121,35 @@ export function getIngredients(db: Database, dishId: number): Ingredient[] {
  * insert each dish transactionally, and return the number inserted.
  */
 export async function seedDishes(db: Database, llm: Llm, count: number): Promise<number> {
-  const out = await llm.structured({
-    system: "You are a chef cataloguing Ukrainian and Russian home dishes makeable in Germany.",
-    prompt: `Return ${count} popular Ukrainian/Russian dishes. For each provide: nameRu, nameUa, nameDe, cuisine ('ru'|'ua'), tags (array of strings), servings (integer), and ingredients with canonical Russian names, qty (number or null) and unit (string or null). Use ingredients buyable in German supermarkets.`,
-    toolName: "save_dishes",
-    description: "Persist the generated dish catalogue",
-    schema: DishSeedSchema,
-    // 30 dishes with ingredients far exceed the default 1024-token cap; without a
-    // larger budget the tool JSON is truncated and "dishes" arrives undefined.
-    maxTokens: 8192,
-  });
-
+  // Seed in small batches: a single call for ~30 dishes overflows the model's
+  // output-token budget and the truncated tool JSON arrives unusable ("dishes"
+  // undefined). Batching keeps each response small; we dedupe by nameRu and stop
+  // as soon as the model stops producing anything new, so we never loop forever.
+  const BATCH = 8;
+  const seen = new Set<string>();
   let n = 0;
-  for (const dish of out.dishes) {
-    insertDish(db, dish);
-    n++;
+  while (n < count) {
+    const want = Math.min(BATCH, count - n);
+    const exclude =
+      seen.size > 0 ? ` Do NOT repeat any of these already-chosen dishes: ${[...seen].join(", ")}.` : "";
+    const out = await llm.structured({
+      system: "You are a chef cataloguing Ukrainian and Russian home dishes makeable in Germany.",
+      prompt: `Return ${want} popular Ukrainian/Russian dishes.${exclude} For each provide: nameRu, nameUa, nameDe, cuisine ('ru'|'ua'), tags (array of strings), servings (integer), and ingredients with canonical Russian names, qty (number or null) and unit (string or null). Use ingredients buyable in German supermarkets.`,
+      toolName: "save_dishes",
+      description: "Persist the generated dish catalogue",
+      schema: DishSeedSchema,
+      maxTokens: 4096,
+    });
+    let added = 0;
+    for (const dish of out.dishes) {
+      if (seen.has(dish.nameRu)) continue;
+      seen.add(dish.nameRu);
+      insertDish(db, dish);
+      n++;
+      added++;
+      if (n >= count) break;
+    }
+    if (added === 0) break; // model produced nothing new — stop rather than loop forever
   }
   return n;
 }
