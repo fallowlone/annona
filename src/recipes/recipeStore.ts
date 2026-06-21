@@ -127,6 +127,9 @@ export async function seedDishes(db: Database, llm: Llm, count: number): Promise
     toolName: "save_dishes",
     description: "Persist the generated dish catalogue",
     schema: DishSeedSchema,
+    // 30 dishes with ingredients far exceed the default 1024-token cap; without a
+    // larger budget the tool JSON is truncated and "dishes" arrives undefined.
+    maxTokens: 8192,
   });
 
   let n = 0;

@@ -8,6 +8,7 @@ export interface Llm {
     toolName: string;
     description: string;
     schema: z.ZodType<T>;
+    maxTokens?: number;
   }): Promise<T>;
 }
 
@@ -25,6 +26,7 @@ export function createLlm(deps: { apiKey: string; model: string; client?: LlmCli
     toolName: string;
     description: string;
     schema: z.ZodType<T>;
+    maxTokens?: number;
   }): Promise<T> {
     // zod v4 ships native JSON Schema conversion. (The old zod-to-json-schema lib
     // targets zod v3 and silently emits a schema with no root "type" against a v4
@@ -32,7 +34,7 @@ export function createLlm(deps: { apiKey: string; model: string; client?: LlmCli
     const inputSchema = z.toJSONSchema(a.schema);
     const res = await client.messages.create({
       model: deps.model,
-      max_tokens: 1024,
+      max_tokens: a.maxTokens ?? 1024,
       ...(a.system !== undefined ? { system: a.system } : {}),
       tools: [{ name: a.toolName, description: a.description, input_schema: inputSchema }],
       tool_choice: { type: "tool", name: a.toolName },
