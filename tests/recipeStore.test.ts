@@ -86,6 +86,10 @@ test("seedDishes calls the injected Llm and inserts returned dishes", async () =
   expect(n).toBe(2);
   const all = listDishes(db);
   expect(all).toHaveLength(2);
+  expect(all[0]!.nameRu).toBe("Борщ");
+  expect(all[1]!.nameRu).toBe("Пельмени");
+  expect(all[0]!.ingredients.map((i) => i.canonical)).toContain("свёкла");
+  expect(all[1]!.ingredients.map((i) => i.canonical)).toContain("фарш");
 });
 
 test("seedDishes inserts all ingredients for seeded dishes", async () => {
@@ -100,26 +104,10 @@ test("seedDishes inserts all ingredients for seeded dishes", async () => {
   expect(all[0]!.ingredients).toHaveLength(3);
 });
 
-test("transactional rollback: failed ingredient insert leaves no dish", () => {
+test("transactional rollback: failed ingredient insert leaves no orphan dish", () => {
   const db = openDb(":memory:");
-
-  // Create a dish with an ingredient whose canonical_name would violate NOT NULL
-  // We simulate this by patching the db after dish insert inside the transaction.
-  // The easiest approach: use a dish with a broken ingredient canonical (empty string
-  // violates the z.string().min(1) schema, but at the DB level we need a runtime error).
-  // We test the transaction by forcing an error via a mock:
-  const originalRun = db.run.bind(db);
-  let callCount = 0;
-  // After first ingredient insert succeeds, throw on the second to simulate partial failure.
-  // We wrap this in a transaction-aware test by inserting a dish with ingredients,
-  // then checking the DB only has complete dishes.
-
-  // Simpler and more direct: insert a normal dish and verify atomicity via the
-  // fact that listDishes never shows a dish without ingredients.
-  const id = insertDish(db, borscht);
-  const all = listDishes(db);
-  expect(all).toHaveLength(1);
-  expect(all[0]!.ingredients).toHaveLength(3);
-  // All-or-nothing: if we got a dish, it must have all 3 ingredients
-  expect(all[0]!.id).toBe(id);
+  db.run("DROP TABLE ingredients");
+  expect(() => insertDish(db, borscht)).toThrow();
+  const rows = db.query("SELECT * FROM dishes").all();
+  expect(rows).toHaveLength(0);
 });
