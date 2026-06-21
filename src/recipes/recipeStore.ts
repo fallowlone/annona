@@ -21,6 +21,7 @@ const DishSchema = z.object({
   ingredients: z.array(IngredientSchema).min(1),
 });
 
+// Zod infers nullable fields in the schema that don't structurally match the Dish interface, so we cast to bridge them.
 export const DishSeedSchema: z.ZodType<{ dishes: Dish[] }> = z.object({
   dishes: z.array(DishSchema),
 }) as unknown as z.ZodType<{ dishes: Dish[] }>;

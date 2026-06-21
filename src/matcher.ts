@@ -36,7 +36,7 @@ export function createMatcher(deps: {
 
     db.run(
       "INSERT OR REPLACE INTO synonyms(canonical_name,search_terms_de,updated_at) VALUES(?,?,?)",
-      [canonical, JSON.stringify(out.terms), week]
+      [canonical, JSON.stringify(out.terms), new Date().toISOString()]
     );
     return out.terms;
   }

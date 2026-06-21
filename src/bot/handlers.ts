@@ -1,4 +1,4 @@
-import type { Dish } from "../types";
+import type { Dish, Offer } from "../types";
 import type { Matcher } from "../matcher";
 import { rankDishes, buildShoppingList } from "../recommender";
 
@@ -15,7 +15,7 @@ export async function handleRecommend(deps: {
   const canonicals = [
     ...new Set(deps.dishes.flatMap((d) => d.ingredients.map((i) => i.canonical))),
   ];
-  const matches = new Map();
+  const matches = new Map<string, Offer | null>();
   for (const c of canonicals) {
     matches.set(c, await deps.matcher.matchIngredient(c));
   }
