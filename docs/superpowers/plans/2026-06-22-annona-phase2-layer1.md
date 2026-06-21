@@ -771,7 +771,7 @@ git commit -m "feat: rank dishes by coverage then keeps_days then cost"
 
 **Interfaces:**
 - Consumes: `RankedDish.coverage` (Task 5), `Dish.keepsDays` (Task 3).
-- Produces: `handleRecommend(deps: { dishes; matcher; coverageMin?; limit? }): Promise<string>` — filters to coverage ≥ `coverageMin` (default 0.7), takes the top `limit` (default 5), and renders one compact line per dish (no per-ingredient breakdown). Replaces the old `topN` parameter.
+- Produces: `handleRecommend(deps: { dishes; matcher; coverageMin?; limit? }): Promise<string>` — filters to coverage ≥ `coverageMin` (default 0.7), takes the top `limit` (default 5), and renders one compact line per dish (no per-ingredient breakdown). Each line surfaces servings ("на N порц.") and keeping ("хранится ~N дн."). Replaces the old `topN` parameter.
 
 - [ ] **Step 1: Rewrite the failing test**
 
@@ -797,7 +797,8 @@ test("handleRecommend renders a compact line per qualifying dish", async () => {
   const text = await handleRecommend({ dishes, matcher });
   expect(text).toContain("Картофельное пюре");
   expect(text).toContain("2/2"); // both ingredients on offer
-  expect(text).toContain("3"); // keeps_days surfaced
+  expect(text).toContain("на 4 порц"); // servings surfaced
+  expect(text).toContain("3 дн"); // keeps_days surfaced
 });
 
 test("handleRecommend omits dishes below the coverage threshold", async () => {
@@ -913,7 +914,7 @@ export async function handleRecommend(deps: {
     const total = r.dish.ingredients.length;
     const keeps = r.dish.keepsDays ?? 1;
     lines.push(
-      `🍲 *${r.dish.nameRu}* — ${r.onOfferCount}/${total} ингр. в акции, ~${r.estTotal.toFixed(2)}€, хранится ~${keeps} дн.`
+      `🍲 *${r.dish.nameRu}* — ${r.onOfferCount}/${total} ингр. в акции · на ${r.dish.servings} порц. · ~${r.estTotal.toFixed(2)}€ · хранится ~${keeps} дн.`
     );
   }
   return lines.join("\n").trim();
@@ -1155,7 +1156,7 @@ These are operator steps, not automated — run them after the branch merges and
 
 1. Redeploy: `./deploy.sh home` (the guarded migration upgrades the existing 30-dish DB in place).
 2. Seed to 100+: `ssh home 'cd ~/annona && docker compose run --rm annona bun run src/recipes/seed.ts'` then `ssh home 'cd ~/annona && docker compose restart annona'`. Confirm the log reports new dishes and the catalogue reaches ~110.
-3. In Telegram, send `/digest`. Confirm a short list (≤5) of dishes, each one line with `N/M ингр. в акции`, an estimated total, and a "хранится ~N дн." hint.
+3. In Telegram, send `/digest`. Confirm a short list (≤5) of dishes, each one line with `N/M ингр. в акции`, a "на N порц." servings hint, an estimated total, and a "хранится ~N дн." hint.
 4. Confirm offers come only from whitelist chains: a non-whitelist store should no longer surface. (Watch `docker compose logs` for the per-ingredient match behaviour.)
 
 `mapsLink` is built and unit-tested in Task 1 but is not yet rendered into any reply — it is consumed by Layer 2's store-grouped shopping list (`/list`). That is intended layering, not a gap.
