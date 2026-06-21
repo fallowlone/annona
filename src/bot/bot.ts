@@ -12,7 +12,10 @@ export function createBot(deps: {
   const bot = new Bot(deps.token);
 
   bot.use(async (ctx, next) => {
-    if (!isAllowed(ctx.from?.id, deps.allowedUserIds)) return; // silently ignore strangers
+    if (!isAllowed(ctx.from?.id, deps.allowedUserIds)) {
+      console.warn("Ignored message from non-whitelisted user id:", ctx.from?.id);
+      return; // silently ignore strangers
+    }
     await next();
   });
 
