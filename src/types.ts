@@ -1,3 +1,5 @@
+import type { StoreKey } from "./stores";
+
 export type Offer = {
   externalId: number;
   store: string; // advertiser uniqueName, e.g. 'aldi-nord'
@@ -49,3 +51,11 @@ export type WeeklyMenu = { days: MenuDay[] };
 
 export type IntentKind = "suggest" | "select_dishes" | "show_menu" | "show_list" | "help";
 export type Intent = { kind: IntentKind; dishNames: string[] };
+
+export type StoreGroup = {
+  store: StoreKey;
+  storeName: string;
+  mapsUrl: string;
+  items: { ingredient: string; product: string; price: number }[];
+};
+export type GroupedShoppingList = { groups: StoreGroup[]; missing: string[] };
