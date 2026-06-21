@@ -1,0 +1,23 @@
+{
+  "name": "annona",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "bun test",
+    "start": "bun run src/main.ts",
+    "seed": "bun run src/recipes/seed.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.105.0",
+    "grammy": "1.44.0",
+    "zod": "4.4.3",
+    "zod-to-json-schema": "3.25.2"
+  }
+}
