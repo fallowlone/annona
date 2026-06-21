@@ -9,7 +9,7 @@ const offer = (over: Partial<Offer>): Offer => ({
   product: "X",
   price: 1,
   oldPrice: null,
-  referencePrice: 1,
+  referencePrice: null,
   unit: "St",
   validFrom: "2026-06-22",
   validTo: "2026-06-28",
@@ -76,19 +76,19 @@ test("rankDishes with a null match", () => {
   expect(ranked[0].estTotal).toBe(1);
 });
 
-test("rankDishes estTotal uses price directly", () => {
+test("rankDishes estTotal uses effectiveUnitPrice (referencePrice ?? price)", () => {
   const matches = new Map<string, Offer | null>([
     [
       "масло",
       offer({
-        price: 5,
-        referencePrice: null, // no reference price
+        price: 10,
+        referencePrice: 6, // effective price is 6, not 10
         storeName: "Kaufland",
       }),
     ],
   ]);
   const ranked = rankDishes([dish("X", ["масло"])], matches);
-  expect(ranked[0].estTotal).toBe(5);
+  expect(ranked[0].estTotal).toBe(6); // must be 6 (referencePrice), not 10 (price)
 });
 
 test("buildShoppingList creates items from matches", () => {
@@ -109,6 +109,23 @@ test("buildShoppingList creates items from matches", () => {
   expect(list[0].store).toBe("Kaufland");
   expect(list[0].product).toBe("Schmand");
   expect(list[0].price).toBe(0.99);
+});
+
+test("buildShoppingList uses effectiveUnitPrice (referencePrice ?? price)", () => {
+  const matches = new Map<string, Offer | null>([
+    [
+      "сметана",
+      offer({
+        storeName: "Aldi",
+        product: "Sauerrahm",
+        price: 3.29,
+        referencePrice: 2.49, // effective price is 2.49, not 3.29
+      }),
+    ],
+  ]);
+  const list = buildShoppingList(dish("X", ["сметана"]), matches);
+  expect(list).toHaveLength(1);
+  expect(list[0].price).toBe(2.49); // must be 2.49 (referencePrice), not 3.29 (price)
 });
 
 test("rankDishes with empty dish list", () => {

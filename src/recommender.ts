@@ -1,4 +1,5 @@
 import type { Dish, Offer, RankedDish, ShoppingItem } from "./types";
+import { effectiveUnitPrice } from "./normalize";
 
 export function rankDishes(
   dishes: Dish[],
@@ -11,7 +12,7 @@ export function rankDishes(
       const m = matches.get(ing.canonical);
       if (m) {
         onOfferCount++;
-        estTotal += m.price;
+        estTotal += effectiveUnitPrice(m);
       }
     }
     return { dish, onOfferCount, estTotal };
@@ -33,7 +34,7 @@ export function buildShoppingList(
         ingredient: ing.canonical,
         store: m.storeName,
         product: m.product,
-        price: m.price,
+        price: effectiveUnitPrice(m),
       });
     }
   }
