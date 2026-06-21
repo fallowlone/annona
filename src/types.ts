@@ -1,0 +1,42 @@
+export type Offer = {
+  externalId: number;
+  store: string; // advertiser uniqueName, e.g. 'aldi-nord'
+  storeName: string; // advertiser display name
+  product: string; // human product text
+  price: number; // EUR
+  oldPrice: number | null;
+  referencePrice: number | null; // per-unit price, e.g. €/kg
+  unit: string; // unit shortName, e.g. 'kg', 'St'
+  validFrom: string; // ISO date
+  validTo: string; // ISO date
+};
+
+export type Ingredient = {
+  canonical: string;
+  qty: number | null;
+  unit: string | null;
+};
+
+export type Dish = {
+  id?: number;
+  nameRu: string;
+  nameUa: string | null;
+  nameDe: string | null;
+  cuisine: string; // 'ru' | 'ua'
+  tags: string[];
+  servings: number;
+  ingredients: Ingredient[];
+};
+
+export type RankedDish = {
+  dish: Dish;
+  onOfferCount: number;
+  estTotal: number;
+};
+
+export type ShoppingItem = {
+  ingredient: string;
+  store: string;
+  product: string;
+  price: number;
+};
