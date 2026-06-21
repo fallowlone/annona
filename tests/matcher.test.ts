@@ -27,7 +27,7 @@ test("searchTerms hits synonym cache without calling the LLM", async () => {
   expect(called).toBe(false);
 });
 
-test("matchIngredient returns the cheapest offer across all terms", async () => {
+test("matchIngredient returns the cheapest offer across all terms and cache-hit guards BOTH provider AND LLM", async () => {
   const db = openDb(":memory:");
   const provider: OfferProvider = {
     async search(q) {
@@ -39,11 +39,73 @@ test("matchIngredient returns the cheapest offer across all terms", async () => 
   const best = await m.matchIngredient("сметана");
   expect(best!.storeName).toBe("Kaufland");
   expect(best!.referencePrice).toBe(0.99);
-  // second call served from match_cache (provider would throw if hit again)
+  // second call served from match_cache — both provider AND LLM throw if invoked
+  const throwingLlm: Llm = { async structured() { throw new Error("LLM must not be called on cache hit"); } };
   const m2 = createMatcher({
-    db, llm: llmStub([]), week: "2026-W26",
-    provider: { async search() { throw new Error("should be cached"); } },
+    db, llm: throwingLlm, week: "2026-W26",
+    provider: { async search() { throw new Error("provider must not be called on cache hit"); } },
   });
   const cached = await m2.matchIngredient("сметана");
   expect(cached!.storeName).toBe("Kaufland");
+});
+
+test("searchTerms cache-MISS calls LLM and persists terms to synonyms table", async () => {
+  const db = openDb(":memory:");
+  let called = false;
+  const llm: Llm = {
+    async structured() {
+      called = true;
+      return { terms: ["Schmand", "Saure Sahne"] } as never;
+    },
+  };
+  const provider: OfferProvider = { async search() { return []; } };
+  const m = createMatcher({ db, llm, provider, week: "2026-W26" });
+  const terms = await m.searchTerms("сметана");
+  expect(terms).toEqual(["Schmand", "Saure Sahne"]);
+  expect(called).toBe(true);
+  // verify persisted to synonyms table
+  const row = db
+    .query("SELECT search_terms_de FROM synonyms WHERE canonical_name = ?")
+    .get("сметана") as { search_terms_de: string } | null;
+  expect(row).not.toBeNull();
+  expect(JSON.parse(row!.search_terms_de)).toEqual(["Schmand", "Saure Sahne"]);
+});
+
+test("matchIngredient returns null when no offers found, and caches the null result", async () => {
+  const db = openDb(":memory:");
+  const m = createMatcher({
+    db,
+    llm: llmStub(["Schmand"]),
+    provider: { async search() { return []; } },
+    week: "2026-W26",
+  });
+  const result = await m.matchIngredient("сметана");
+  expect(result).toBeNull();
+  // second call: both LLM and provider throw — null must be served from cache
+  const throwingLlm: Llm = { async structured() { throw new Error("LLM must not be called on cached null"); } };
+  const m2 = createMatcher({
+    db, llm: throwingLlm, week: "2026-W26",
+    provider: { async search() { throw new Error("provider must not be called on cached null"); } },
+  });
+  const cached = await m2.matchIngredient("сметана");
+  expect(cached).toBeNull();
+});
+
+test("matchIngredient picks cheapest by effectiveUnitPrice using referencePrice-null fallback", async () => {
+  const db = openDb(":memory:");
+  // offer A: referencePrice=null, price=0.79 → effectiveUnitPrice=0.79 (winner)
+  // offer B: referencePrice=1.20, price=0.50 → effectiveUnitPrice=1.20 (higher)
+  const provider: OfferProvider = {
+    async search() {
+      return [
+        offer({ externalId: 10, referencePrice: null, price: 0.79, storeName: "Aldi" }),
+        offer({ externalId: 11, referencePrice: 1.20, price: 0.50, storeName: "Rewe" }),
+      ];
+    },
+  };
+  const m = createMatcher({ db, llm: llmStub(["Schmand"]), provider, week: "2026-W26" });
+  const best = await m.matchIngredient("сметана");
+  // Aldi wins because its effectiveUnitPrice (price=0.79, referencePrice=null→0.79) < Rewe's referencePrice=1.20
+  expect(best!.storeName).toBe("Aldi");
+  expect(best!.price).toBe(0.79);
 });
