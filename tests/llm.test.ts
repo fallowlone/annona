@@ -20,6 +20,34 @@ test("structured returns validated tool input", async () => {
   expect(out.terms).toEqual(["Schmand"]);
 });
 
+test("structured sends a valid JSON-schema tool (input_schema.type === 'object')", async () => {
+  // Regression guard: zod v4 + the old zod-to-json-schema lib produced a schema
+  // with no root "type", which the real Anthropic API rejects (400 invalid_request).
+  // The fake client captures the outgoing request so this class of bug is caught
+  // offline instead of only on a live API call.
+  type CreateReq = {
+    tools: Array<{ input_schema: { type?: string; properties?: Record<string, unknown> } }>;
+  };
+  let captured: CreateReq | undefined;
+  const client: LlmClient = {
+    messages: {
+      create: async (req) => {
+        captured = req as CreateReq;
+        return { content: [{ type: "tool_use", name: "t", input: { terms: ["Schmand"] } }] };
+      },
+    },
+  };
+  const llm = createLlm({ apiKey: "x", model: "claude-haiku-4-5", client });
+  await llm.structured({
+    prompt: "x", toolName: "t", description: "d",
+    schema: z.object({ terms: z.array(z.string()) }),
+  });
+  const schema = captured!.tools[0]!.input_schema;
+  expect(schema.type).toBe("object");
+  expect(schema.properties).toBeDefined();
+  expect(schema.properties!.terms).toBeDefined();
+});
+
 test("structured retries once on invalid output then succeeds", async () => {
   let calls = 0;
   const client: LlmClient = {

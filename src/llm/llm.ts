@@ -1,6 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 
 export interface Llm {
   structured<T>(args: {
@@ -27,11 +26,10 @@ export function createLlm(deps: { apiKey: string; model: string; client?: LlmCli
     description: string;
     schema: z.ZodType<T>;
   }): Promise<T> {
-    // zod-to-json-schema expects zod/v3's ZodSchema, but this project uses zod v4.
-    // The runtime call works fine; the cast through unknown resolves the structural
-    // type mismatch between the two versions without touching the exported signature.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const inputSchema = zodToJsonSchema(a.schema as unknown as any, { target: "jsonSchema7" });
+    // zod v4 ships native JSON Schema conversion. (The old zod-to-json-schema lib
+    // targets zod v3 and silently emits a schema with no root "type" against a v4
+    // schema, which the Anthropic API rejects with "input_schema.type: Field required".)
+    const inputSchema = z.toJSONSchema(a.schema);
     const res = await client.messages.create({
       model: deps.model,
       max_tokens: 1024,
