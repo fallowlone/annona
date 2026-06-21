@@ -1,9 +1,11 @@
+import { z } from "zod";
 import type { Fetcher } from "../net/fetcher";
 import type { Offer } from "../types";
 import { cleanName } from "../normalize";
 
 const BASE = "https://api.marktguru.de/api/v1";
 const HOME = "https://www.marktguru.de/";
+const DEFAULT_LIMIT = 80;
 
 export interface OfferProvider {
   search(query: string): Promise<Offer[]>;
@@ -36,22 +38,25 @@ export function extractKeys(html: string): { apiKey: string; clientKey: string }
   throw new Error("marktguru: could not extract api/client keys from homepage");
 }
 
-type RawOffer = {
-  id: number;
-  price: number;
-  oldPrice: number | null;
-  referencePrice: number | null;
-  description?: string;
-  unit?: { shortName?: string };
-  product?: { name?: string };
-  brand?: { name?: string };
-  advertisers?: Array<{ name?: string; uniqueName?: string }>;
-  validityDates?: Array<{ from?: string; to?: string }>;
-};
+const RawOfferSchema = z.object({
+  id: z.number(),
+  price: z.number(),
+  oldPrice: z.number().nullable().optional(),
+  referencePrice: z.number().nullable().optional(),
+  description: z.string().optional(),
+  unit: z.object({ shortName: z.string().optional() }).optional(),
+  product: z.object({ name: z.string().optional() }).optional(),
+  brand: z.object({ name: z.string().optional() }).optional(),
+  advertisers: z.array(z.object({ name: z.string().optional(), uniqueName: z.string().optional() })).optional(),
+  validityDates: z.array(z.object({ from: z.string().optional(), to: z.string().optional() })).optional(),
+});
+
+const SearchResponseSchema = z.object({
+  results: z.array(RawOfferSchema),
+});
 
 export function parseOffers(json: unknown): Offer[] {
-  const results =
-    (json as { results?: RawOffer[] } | null)?.results ?? [];
+  const { results } = SearchResponseSchema.parse(json);
   return results.map((r) => {
     const adv = r.advertisers?.[0];
     const valid = r.validityDates?.[0];
@@ -89,7 +94,7 @@ export function createMarktguruProvider(deps: {
           "x-apikey": deps.keys.apiKey,
           "x-clientkey": deps.keys.clientKey,
         },
-        query: { as: "web", q: query, limit: 80, offset: 0, zipCode: deps.zipCode },
+        query: { as: "web", q: query, limit: DEFAULT_LIMIT, offset: 0, zipCode: deps.zipCode },
       });
       return parseOffers(json);
     },

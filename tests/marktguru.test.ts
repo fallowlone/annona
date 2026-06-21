@@ -21,6 +21,19 @@ test("parseOffers maps marktguru results to Offer", () => {
   expect(o?.validFrom).toBe("2026-06-22T00:00:00");
 });
 
+test("parseOffers throws on malformed input", () => {
+  expect(() => parseOffers(null)).toThrow();
+  expect(() => parseOffers({ results: "oops" })).toThrow();
+  expect(() => parseOffers({})).toThrow();
+  expect(() => parseOffers({ results: [{ id: "x" }] })).toThrow();
+});
+
+test("parseOffers maps nullable oldPrice to null", () => {
+  const offers = parseOffers(search);
+  const second = offers[1];
+  expect(second?.oldPrice).toBeNull();
+});
+
 test("provider.search sends keys + zipCode and returns parsed offers", async () => {
   let seen: { url: string; headers: Record<string, string>; query?: Record<string, string | number> } | null = null;
   const fakeFetcher: Fetcher = {
