@@ -122,3 +122,31 @@ test("routes '/delrecipe X' to delete_dish", () => {
 test("'удали X' (no 'блюдо') still means remove from the week", () => {
   expect(routeMessage("удали борщ")).toEqual({ kind: "remove_dishes", dishNames: ["борщ"] });
 });
+
+test("routes 'у меня есть X, Y' to add_pantry", () => {
+  expect(routeMessage("у меня есть рис, лук")).toEqual({
+    kind: "add_pantry",
+    dishNames: ["рис", "лук"],
+  });
+});
+
+test("routes 'есть дома X' to add_pantry", () => {
+  expect(routeMessage("есть дома масло")).toEqual({ kind: "add_pantry", dishNames: ["масло"] });
+});
+
+test("routes 'закончился X' to remove_pantry (not remove_dishes)", () => {
+  expect(routeMessage("закончился рис")).toEqual({ kind: "remove_pantry", dishNames: ["рис"] });
+});
+
+test("routes 'убери из дома X' to remove_pantry (before remove_dishes)", () => {
+  expect(routeMessage("убери из дома лук")).toEqual({ kind: "remove_pantry", dishNames: ["лук"] });
+});
+
+test("routes bare '/pantry' and 'что дома' to show_pantry", () => {
+  expect(routeMessage("/pantry")).toEqual({ kind: "show_pantry", dishNames: [] });
+  expect(routeMessage("что дома")).toEqual({ kind: "show_pantry", dishNames: [] });
+});
+
+test("'убери борщ' (no 'из дома') still routes to remove_dishes", () => {
+  expect(routeMessage("убери борщ")).toEqual({ kind: "remove_dishes", dishNames: ["борщ"] });
+});

@@ -14,6 +14,9 @@ function names(rest: string): string[] {
 
 const ADD_CUSTOM = [/^добавь\s+блюдо\s+(.+)$/i, /^новое\s+блюдо\s+(.+)$/i, /^\/recipe\s+(.+)$/i];
 const ADD = [/^добавь\s+(.+)$/i, /^\+\s*(.+)$/i];
+const SHOW_PANTRY = [/^\/pantry$/i, /^что\s+(есть\s+)?дома\??$/i];
+const ADD_PANTRY = [/^у\s+меня\s+есть\s+(.+)$/i, /^есть\s+дома\s+(.+)$/i, /^дома\s+есть\s+(.+)$/i, /^\/pantry\s+(.+)$/i];
+const REMOVE_PANTRY = [/^закончил(?:ся|ась|ись)\s+(.+)$/i, /^убери\s+из\s+дома\s+(.+)$/i];
 // "удали блюдо X" deletes from the catalogue — checked before the week-removal verbs.
 const DELETE_CUSTOM = [/^удали\s+блюдо\s+(.+)$/i, /^убери\s+блюдо\s+(.+)$/i, /^\/delrecipe\s+(.+)$/i];
 const REMOVE = [/^убери\s+(.+)$/i, /^удали\s+(.+)$/i, /^минус\s+(.+)$/i, /^-\s*(.+)$/i];
@@ -41,6 +44,26 @@ export function routeMessage(text: string): Intent | null {
     if (m) {
       const n = names(m[1]!);
       return n.length ? { kind: "add_dishes", dishNames: n } : null;
+    }
+  }
+
+  for (const re of SHOW_PANTRY) {
+    if (re.test(t)) return { kind: "show_pantry", dishNames: [] };
+  }
+
+  for (const re of ADD_PANTRY) {
+    const m = t.match(re);
+    if (m) {
+      const n = names(m[1]!);
+      return n.length ? { kind: "add_pantry", dishNames: n } : null;
+    }
+  }
+
+  for (const re of REMOVE_PANTRY) {
+    const m = t.match(re);
+    if (m) {
+      const n = names(m[1]!);
+      return n.length ? { kind: "remove_pantry", dishNames: n } : null;
     }
   }
 
