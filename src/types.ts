@@ -49,8 +49,17 @@ export type ShoppingItem = {
 export type MenuDay = { day: number; first: Dish | null; second: Dish | null };
 export type WeeklyMenu = { days: MenuDay[] };
 
-export type IntentKind = "suggest" | "select_dishes" | "show_menu" | "show_list" | "help";
-export type Intent = { kind: IntentKind; dishNames: string[] };
+export type IntentKind =
+  | "suggest"
+  | "select_dishes"
+  | "add_dishes"
+  | "remove_dishes"
+  | "add_custom_dish"
+  | "scale_dish"
+  | "show_menu"
+  | "show_list"
+  | "help";
+export type Intent = { kind: IntentKind; dishNames: string[]; targetServings?: number };
 
 export type StoreGroup = {
   store: StoreKey;

@@ -28,6 +28,7 @@ const schema = z.object({
   OFFER_COVERAGE_MIN: z.coerce.number().min(0).max(1).default(0.7),
   DIGEST_LIMIT: z.coerce.number().int().positive().default(5),
   MENU_DAYS: z.coerce.number().int().positive().default(7),
+  HOUSEHOLD_SIZE: z.coerce.number().int().positive().default(2),
 });
 
 export type ProxyMode = "none" | "pool" | "service";
@@ -44,6 +45,7 @@ export type Config = {
   offerCoverageMin: number;
   digestLimit: number;
   menuDays: number;
+  householdSize: number;
 };
 
 export function loadConfig(env: Record<string, string | undefined>): Config {
@@ -60,5 +62,6 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     offerCoverageMin: p.OFFER_COVERAGE_MIN,
     digestLimit: p.DIGEST_LIMIT,
     menuDays: p.MENU_DAYS,
+    householdSize: p.HOUSEHOLD_SIZE,
   };
 }
