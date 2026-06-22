@@ -137,6 +137,16 @@ export function getIngredients(db: Database, dishId: number): Ingredient[] {
     .map((i) => ({ canonical: i.canonical_name, qty: i.qty, unit: i.unit }));
 }
 
+/** Return the id of a catalogue dish by name_ru (case-insensitive), or null. */
+export function dishIdByName(db: Database, name: string): number | null {
+  const needle = name.toLowerCase();
+  const rows = db
+    .query<{ id: number; name_ru: string }, []>("SELECT id, name_ru FROM dishes")
+    .all();
+  const match = rows.find((r) => r.name_ru.toLowerCase() === needle);
+  return match ? match.id : null;
+}
+
 // ── LLM seeding ───────────────────────────────────────────────────────────
 
 /**

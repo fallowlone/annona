@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { openDb } from "../src/db/db";
-import { insertDish, listDishes, getIngredients, seedDishes, generateDish, deleteDish, DishSeedSchema } from "../src/recipes/recipeStore";
+import { insertDish, listDishes, getIngredients, seedDishes, generateDish, deleteDish, DishSeedSchema, dishIdByName } from "../src/recipes/recipeStore";
 import type { Dish } from "../src/types";
 import type { Llm } from "../src/llm/llm";
 
@@ -197,4 +197,12 @@ test("seedDishes only adds dishes missing from the existing catalogue", async ()
   const added = await seedDishes(db, fakeLlm, 2);
   expect(added).toBe(1); // borscht skipped, pelmeni added
   expect(listDishes(db).map((d) => d.nameRu).sort()).toEqual(["Борщ", "Пельмени"]);
+});
+
+test("dishIdByName finds a dish case-insensitively, null when absent", () => {
+  const db = openDb(":memory:");
+  const id = insertDish(db, borscht);
+  expect(dishIdByName(db, "борщ")).toBe(id);
+  expect(dishIdByName(db, "БОРЩ")).toBe(id);
+  expect(dishIdByName(db, "суши")).toBeNull();
 });
