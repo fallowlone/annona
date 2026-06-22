@@ -94,3 +94,15 @@ test("returns null for an empty message", () => {
 test("returns null when a verb has no dish name", () => {
   expect(routeMessage("добавь")).toBeNull();
 });
+
+test("rejects an absurd serving count (over the cap) instead of routing scale", () => {
+  expect(routeMessage("плов на 99999 порций")).toBeNull();
+});
+
+test("still routes a sane serving count", () => {
+  expect(routeMessage("плов на 12 порций")).toMatchObject({ kind: "scale_dish", targetServings: 12 });
+});
+
+test("drops a pathologically long dish name (defers to the LLM)", () => {
+  expect(routeMessage("добавь блюдо " + "я".repeat(300))).toBeNull();
+});

@@ -182,11 +182,13 @@ export async function seedDishes(db: Database, llm: Llm, target: number): Promis
  * conventions as `seedDishes`). Returns a validated Dish; the caller persists it.
  */
 export async function generateDish(llm: Llm, name: string): Promise<Dish> {
+  // Neutralize quote-breakout and cap length before interpolating user text into the prompt.
+  const safeName = name.replace(/"/g, "'").slice(0, 120);
   const out = await llm.structured({
     system:
       "You are a chef cataloguing home dishes a CIS family can cook in Germany: mostly Ukrainian and Russian classics, plus globally popular dishes.",
     prompt:
-      `Describe the single dish "${name}". Provide nameRu, nameUa (or null), nameDe (or null), ` +
+      `Describe the single dish "${safeName}". Provide nameRu, nameUa (or null), nameDe (or null), ` +
       `cuisine (short code like 'ru'|'ua'|'it'), course ('first' for soups/porridge, 'second' for mains), ` +
       `keepsDays (integer 1-5: how many days the cooked dish keeps in a fridge), tags (array of strings), ` +
       `servings (integer), and ingredients with canonical Russian names, qty (number or null) and ` +

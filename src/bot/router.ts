@@ -1,11 +1,15 @@
 import type { Intent } from "../types";
 
-/** Split a remainder like "плов, борщ" into trimmed, non-empty dish names. */
+// Bounds on free-text input so absurd values never reach scaling math or the LLM.
+const MAX_SERVINGS = 100;
+const MAX_DISH_NAME_LEN = 120;
+
+/** Split a remainder into trimmed, non-empty, length-capped dish names. */
 function names(rest: string): string[] {
   return rest
     .split(",")
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter((s) => s.length > 0 && s.length <= MAX_DISH_NAME_LEN);
 }
 
 const ADD_CUSTOM = [/^добавь\s+блюдо\s+(.+)$/i, /^новое\s+блюдо\s+(.+)$/i, /^\/recipe\s+(.+)$/i];
@@ -50,7 +54,7 @@ export function routeMessage(text: string): Intent | null {
   if (s) {
     const name = s[1]!.trim();
     const target = Number(s[2]);
-    if (name && target > 0) {
+    if (name && name.length <= MAX_DISH_NAME_LEN && target > 0 && target <= MAX_SERVINGS) {
       return { kind: "scale_dish", dishNames: [name], targetServings: target };
     }
   }
