@@ -30,6 +30,7 @@ const bot = createBot({
   db,
   plz: cfg.locationPlz,
   menuDays: cfg.menuDays,
+  householdSize: cfg.householdSize,
   coverageMin: cfg.offerCoverageMin,
   digestLimit: cfg.digestLimit,
 });

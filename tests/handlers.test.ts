@@ -1,11 +1,18 @@
 import { test, expect } from "bun:test";
-import { isAllowed, handleRecommend, handleSelect, handleMenu, handleList } from "../src/bot/handlers";
+import {
+  isAllowed, handleRecommend, handleSelect, handleMenu, handleList,
+  handleAddDishes, handleRemoveDishes, handleAddCustomDish, handleScaleDish,
+} from "../src/bot/handlers";
 import type { Dish, Offer } from "../src/types";
 import type { Matcher } from "../src/matcher";
 import { openDb } from "../src/db/db";
-import { insertDish } from "../src/recipes/recipeStore";
-import { saveSelection } from "../src/recipes/selectionStore";
+import { insertDish, listDishes } from "../src/recipes/recipeStore";
+import { saveSelection, getSelection } from "../src/recipes/selectionStore";
 import type { Llm } from "../src/llm/llm";
+
+const llmResolve = (matchedIds: number[], unmatched: string[] = []): Llm => ({
+  async structured() { return { matchedIds, unmatched } as never; },
+});
 
 test("isAllowed enforces the whitelist", () => {
   expect(isAllowed(111, [111, 222])).toBe(true);
@@ -142,4 +149,68 @@ test("handleList groups the selection's ingredients by store", async () => {
   const text = await handleList({ db, dishes, matcher, week: "2026-W26", plz: 30459 });
   expect(text).toContain("Aldi");
   expect(text).toContain("maps.apple.com");
+});
+
+test("handleAddDishes merges into the existing selection without replacing it", async () => {
+  const db = openDb(":memory:");
+  const id1 = insertDish(db, borsch);
+  const id2 = insertDish(db, plov);
+  const dishes = [{ ...borsch, id: id1 }, { ...plov, id: id2 }];
+  saveSelection(db, "2026-W26", [id1]);
+  const text = await handleAddDishes({ llm: llmResolve([id2]), db, dishes, week: "2026-W26" }, ["плов"]);
+  expect(getSelection(db, "2026-W26")).toEqual([id1, id2]);
+  expect(text).toContain("Плов");
+});
+
+test("handleRemoveDishes removes only the named dish", async () => {
+  const db = openDb(":memory:");
+  const id1 = insertDish(db, borsch);
+  const id2 = insertDish(db, plov);
+  const dishes = [{ ...borsch, id: id1 }, { ...plov, id: id2 }];
+  saveSelection(db, "2026-W26", [id1, id2]);
+  const text = await handleRemoveDishes({ llm: llmResolve([id1]), db, dishes, week: "2026-W26" }, ["борщ"]);
+  expect(getSelection(db, "2026-W26")).toEqual([id2]);
+  expect(text).toContain("Борщ");
+});
+
+const shakshuka: Dish = {
+  nameRu: "Шакшука", nameUa: null, nameDe: null, cuisine: "il", course: "second",
+  keepsDays: 1, tags: [], servings: 4,
+  ingredients: [{ canonical: "яйца", qty: 4, unit: "шт" }, { canonical: "помидоры", qty: 400, unit: "г" }],
+};
+const llmDish = (d: Dish): Llm => ({ async structured() { return { dish: d } as never; } });
+
+test("handleAddCustomDish generates and persists a new catalogue dish", async () => {
+  const db = openDb(":memory:");
+  const text = await handleAddCustomDish({ llm: llmDish(shakshuka), db }, "шакшука");
+  expect(listDishes(db).map((d) => d.nameRu)).toContain("Шакшука");
+  expect(text).toContain("Шакшука");
+});
+
+test("handleAddCustomDish is idempotent by name_ru", async () => {
+  const db = openDb(":memory:");
+  insertDish(db, shakshuka);
+  const text = await handleAddCustomDish({ llm: llmDish(shakshuka), db }, "шакшука");
+  expect(listDishes(db).filter((d) => d.nameRu === "Шакшука")).toHaveLength(1);
+  expect(text.toLowerCase()).toContain("уже");
+});
+
+test("handleScaleDish scales a dish's ingredient quantities to the target", async () => {
+  const db = openDb(":memory:");
+  const ricePlov: Dish = { ...plov, ingredients: [{ canonical: "рис", qty: 1, unit: "кг" }] };
+  const id = insertDish(db, ricePlov);
+  const dishes = [{ ...ricePlov, id }];
+  const text = await handleScaleDish({ llm: llmResolve([id]), db, dishes }, "плов", 8);
+  expect(text).toContain("рис");
+  expect(text).toContain("2"); // 1кг at 4 servings → 2кг at 8
+});
+
+test("handleMenu surfaces portion coverage for the household", () => {
+  const db = openDb(":memory:");
+  const id1 = insertDish(db, borsch);
+  const dishes = [{ ...borsch, id: id1 }];
+  saveSelection(db, "2026-W26", [id1]);
+  const text = handleMenu({ db, dishes, week: "2026-W26", menuDays: 7, householdSize: 2 });
+  expect(text).toContain("Борщ");
+  expect(text).toContain("дн"); // coverage days shown
 });

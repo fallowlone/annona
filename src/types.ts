@@ -65,6 +65,6 @@ export type StoreGroup = {
   store: StoreKey;
   storeName: string;
   mapsUrl: string;
-  items: { ingredient: string; product: string; price: number }[];
+  items: { ingredient: string; product: string; price: number; qty: number | null; unit: string | null }[];
 };
 export type GroupedShoppingList = { groups: StoreGroup[]; missing: string[] };

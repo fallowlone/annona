@@ -6,10 +6,21 @@ import type { Llm } from "../llm/llm";
 import { resolveDishes } from "./resolve";
 import { planWeek } from "../planner";
 import { buildGroupedList } from "../shoppingList";
-import { saveSelection, getSelection } from "../recipes/selectionStore";
+import { scaleIngredients } from "../scale";
+import { coverageDays } from "../portions";
+import { addToSelection, removeFromSelection, saveSelection, getSelection } from "../recipes/selectionStore";
+import { generateDish, insertDish } from "../recipes/recipeStore";
+import type { Ingredient } from "../types";
 
 const DEFAULT_COVERAGE_MIN = 0.7;
 const DEFAULT_DIGEST_LIMIT = 5;
+const DEFAULT_HOUSEHOLD = 2;
+
+/** Render one ingredient with an optional quantity, or "по вкусу" when unknown. */
+function fmtIngredient(i: Ingredient): string {
+  if (i.qty === null) return `• ${i.canonical} — по вкусу`;
+  return `• ${i.canonical} — ${i.qty}${i.unit ? ` ${i.unit}` : ""}`;
+}
 
 export function isAllowed(userId: number | undefined, allowed: number[]): boolean {
   return userId !== undefined && allowed.includes(userId);
@@ -20,9 +31,11 @@ export async function handleRecommend(deps: {
   matcher: Matcher;
   coverageMin?: number;
   limit?: number;
+  householdSize?: number;
 }): Promise<string> {
   const coverageMin = deps.coverageMin ?? DEFAULT_COVERAGE_MIN;
   const limit = deps.limit ?? DEFAULT_DIGEST_LIMIT;
+  const household = deps.householdSize ?? DEFAULT_HOUSEHOLD;
 
   const canonicals = [
     ...new Set(deps.dishes.flatMap((d) => d.ingredients.map((i) => i.canonical))),
@@ -45,8 +58,9 @@ export async function handleRecommend(deps: {
   for (const r of top) {
     const total = r.dish.ingredients.length;
     const keeps = r.dish.keepsDays ?? 1;
+    const covers = coverageDays(r.dish.servings, household);
     lines.push(
-      `🍲 *${r.dish.nameRu}* — ${r.onOfferCount}/${total} ингр. в акции · на ${r.dish.servings} порц. · ~${r.estTotal.toFixed(2)}€ · хранится ~${keeps} дн.`
+      `🍲 *${r.dish.nameRu}* — ${r.onOfferCount}/${total} ингр. в акции · на ${r.dish.servings} порц. · хватит ~${covers}дн (семья ${household}) · ~${r.estTotal.toFixed(2)}€ · хранится ~${keeps} дн.`
     );
   }
   return lines.join("\n").trim();
@@ -59,6 +73,9 @@ export function helpText(): string {
     "Я подскажу, что выгодно готовить на этой неделе и где дешевле купить.",
     "",
     "• Напиши блюда через запятую (например «борщ, карбонара, плов») — соберу меню.",
+    "• «добавь плов» / «убери борщ» — правка меню на неделю.",
+    "• «добавь блюдо шакшука» — своё блюдо в каталог.",
+    "• «плов на 8 порций» — пересчёт ингредиентов.",
     "• /digest — что выгодно приготовить.",
     "• /menu — меню на неделю.",
     "• /list — список покупок по магазинам.",
@@ -88,23 +105,26 @@ export function handleMenu(deps: {
   dishes: Dish[];
   week: string;
   menuDays: number;
+  householdSize?: number;
 }): string {
   const ids = getSelection(deps.db, deps.week);
   if (!ids || ids.length === 0) return NO_SELECTION;
 
+  const household = deps.householdSize ?? DEFAULT_HOUSEHOLD;
   const byId = new Map(deps.dishes.filter((d) => d.id !== undefined).map((d) => [d.id as number, d]));
   const chosen = ids.map((id) => byId.get(id)).filter((d): d is Dish => d !== undefined);
   const firsts = chosen.filter((d) => d.course === "first");
   const seconds = chosen.filter((d) => d.course !== "first");
   const menu = planWeek(firsts, seconds, deps.menuDays);
 
+  const cell = (dish: Dish | null): string =>
+    dish ? `${dish.nameRu} (~${coverageDays(dish.servings, household)}дн)` : "—";
+
   const labels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-  const lines = ["📅 Меню на неделю:\n"];
+  const lines = [`📅 Меню на неделю (семья ${household}):\n`];
   for (const d of menu.days) {
     const label = labels[(d.day - 1) % 7] ?? `День ${d.day}`;
-    const first = d.first ? d.first.nameRu : "—";
-    const second = d.second ? d.second.nameRu : "—";
-    lines.push(`*${label}*: 🥣 ${first} · 🍽 ${second}`);
+    lines.push(`*${label}*: 🥣 ${cell(d.first)} · 🍽 ${cell(d.second)}`);
   }
   return lines.join("\n");
 }
@@ -116,23 +136,77 @@ export async function handleList(deps: {
   matcher: Matcher;
   week: string;
   plz: number;
+  householdSize?: number;
 }): Promise<string> {
   const ids = getSelection(deps.db, deps.week);
   if (!ids || ids.length === 0) return NO_SELECTION;
 
+  const household = deps.householdSize ?? DEFAULT_HOUSEHOLD;
   const byId = new Map(deps.dishes.filter((d) => d.id !== undefined).map((d) => [d.id as number, d]));
   const chosen = ids.map((id) => byId.get(id)).filter((d): d is Dish => d !== undefined);
-  const { groups, missing } = await buildGroupedList(chosen, deps.matcher, deps.plz);
+  const { groups, missing } = await buildGroupedList(chosen, deps.matcher, deps.plz, household);
 
   if (groups.length === 0 && missing.length === 0) return "Список пуст.";
 
-  const lines = ["🛒 Список покупок:"];
+  const lines = [`🛒 Список покупок (на ${household} порц.):`];
   for (const g of groups) {
     lines.push(`\n*${g.storeName}* — [на карте](${g.mapsUrl})`);
     for (const it of g.items) {
-      lines.push(`• ${it.ingredient}: ${it.product} — ${it.price.toFixed(2)}€`);
+      const qty = it.qty !== null ? ` — ${it.qty}${it.unit ? ` ${it.unit}` : ""}` : "";
+      lines.push(`• ${it.ingredient}${qty}: ${it.product} — ${it.price.toFixed(2)}€`);
     }
   }
   if (missing.length) lines.push(`\n*Докупить (не в акции):* ${missing.join(", ")}`);
   return lines.join("\n");
+}
+
+type EditDeps = { llm: Llm; db: Database; dishes: Dish[]; week: string };
+
+/** Resolve names and merge them into the week's selection (keeps the rest). */
+export async function handleAddDishes(deps: EditDeps, dishNames: string[]): Promise<string> {
+  const { matched, unmatched } = await resolveDishes(deps.llm, deps.dishes, dishNames);
+  if (matched.length === 0) return "Не понял, какие блюда добавить. " + NO_SELECTION;
+  addToSelection(deps.db, deps.week, matched.map((d) => d.id as number));
+  let msg = `✅ Добавил: ${matched.map((d) => d.nameRu).join(", ")}.`;
+  if (unmatched.length) msg += `\nНе нашёл: ${unmatched.join(", ")}.`;
+  msg += "\n\n/menu — меню · /list — список покупок.";
+  return msg;
+}
+
+/** Resolve names and remove them from the week's selection (no-op if absent). */
+export async function handleRemoveDishes(deps: EditDeps, dishNames: string[]): Promise<string> {
+  const { matched, unmatched } = await resolveDishes(deps.llm, deps.dishes, dishNames);
+  if (matched.length === 0) return "Не понял, какие блюда убрать.";
+  removeFromSelection(deps.db, deps.week, matched.map((d) => d.id as number));
+  let msg = `✅ Убрал: ${matched.map((d) => d.nameRu).join(", ")}.`;
+  if (unmatched.length) msg += `\nНе нашёл: ${unmatched.join(", ")}.`;
+  return msg;
+}
+
+/** Generate a dish from its name via the LLM and persist it to the catalogue. */
+export async function handleAddCustomDish(
+  deps: { llm: Llm; db: Database },
+  name: string
+): Promise<string> {
+  const exists = (n: string) =>
+    deps.db.query("SELECT 1 FROM dishes WHERE lower(name_ru) = lower(?)").get(n) !== null;
+  if (exists(name)) return `«${name}» уже в каталоге.`;
+  const dish = await generateDish(deps.llm, name);
+  if (exists(dish.nameRu)) return `«${dish.nameRu}» уже в каталоге.`;
+  insertDish(deps.db, dish);
+  return `✅ ${dish.nameRu} (${dish.servings} порц., ${dish.ingredients.length} ингр.) добавил в каталог.`;
+}
+
+/** Scale one dish's ingredients to the requested number of portions. */
+export async function handleScaleDish(
+  deps: { llm: Llm; db: Database; dishes: Dish[] },
+  name: string,
+  targetServings: number
+): Promise<string> {
+  const { matched } = await resolveDishes(deps.llm, deps.dishes, [name]);
+  const dish = matched[0];
+  if (!dish) return `Не нашёл блюдо «${name}».`;
+  const scaled = scaleIngredients(dish.ingredients, dish.servings, targetServings);
+  const lines = scaled.map(fmtIngredient);
+  return `🍳 ${dish.nameRu} ×${targetServings} порц.:\n${lines.join("\n")}`;
 }
