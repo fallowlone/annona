@@ -14,14 +14,14 @@ Prioritized by impact / effort. Captured 2026-06-22 after the Phase 3 release
 
 ## P1 — quality / reliability
 
-| # | Item | Why | Effort |
-|---|------|-----|--------|
-| 6 | CI: GitHub Actions running `bun test` + `bunx tsc --noEmit` | 151 tests exist but never run automatically | S |
-| 7 | Deploy from a clean git checkout, not the working tree | `deploy.sh` rsyncs local files — uncommitted/dirty state can ship | S |
-| 8 | Structured logger with levels (replace `console.*`) | `console.error(e)` can leak prompt/user data into logs; no levels | S |
-| 9 | Custom-dish confirm/preview before persisting to the catalogue | LLM dishes are saved unchecked — garbage accumulates forever | M |
-| 10 | "Remove dish from catalogue" command | Catalogue only grows; no delete path | M |
-| 11 | Integration test for `bot.ts` routing | Only file with no automated coverage (manual smoke only) | M |
+| # | Item | Why | Effort | Status |
+|---|------|-----|--------|--------|
+| 6 | CI: GitHub Actions running `bun test` + `bunx tsc --noEmit` | 151 tests exist but never run automatically | S | ✅ done — `.github/workflows/ci.yml`, green |
+| 7 | Deploy from a clean git checkout, not the working tree | `deploy.sh` rsyncs local files — uncommitted/dirty state can ship | S | ✅ done — `git archive HEAD` + clean/pushed guards |
+| 8 | Structured logger with levels (replace `console.*`) | `console.error(e)` can leak prompt/user data into logs; no levels | S | ✅ done — `src/log.ts` (JSON, `errInfo` redacts) |
+| 9 | Custom-dish confirm/preview before persisting to the catalogue | LLM dishes are saved unchecked — garbage accumulates forever | M | |
+| 10 | "Remove dish from catalogue" command | Catalogue only grows; no delete path | M | |
+| 11 | Integration test for `bot.ts` routing | Only file with no automated coverage (manual smoke only) | M | |
 
 ## P2 — features (deferred non-goals)
 
