@@ -11,6 +11,7 @@ import { coverageDays } from "../portions";
 import { addToSelection, removeFromSelection, saveSelection, getSelection } from "../recipes/selectionStore";
 import { generateDish, insertDish, deleteDish } from "../recipes/recipeStore";
 import type { Ingredient } from "../types";
+import { getPantry, addToPantry, removeFromPantry } from "../recipes/pantryStore";
 
 const DEFAULT_COVERAGE_MIN = 0.7;
 const DEFAULT_DIGEST_LIMIT = 5;
@@ -77,6 +78,7 @@ export function helpText(): string {
     "• «добавь блюдо шакшука» — своё блюдо в каталог.",
     "• «удали блюдо шакшука» — убрать блюдо из каталога.",
     "• «плов на 8 порций» — пересчёт ингредиентов.",
+    "• «у меня есть рис, лук» — учту дома, уберу из списка.",
     "• /digest — что выгодно приготовить.",
     "• /menu — меню на неделю.",
     "• /list — список покупок по магазинам.",
@@ -145,7 +147,8 @@ export async function handleList(deps: {
   const household = deps.householdSize ?? DEFAULT_HOUSEHOLD;
   const byId = new Map(deps.dishes.filter((d) => d.id !== undefined).map((d) => [d.id as number, d]));
   const chosen = ids.map((id) => byId.get(id)).filter((d): d is Dish => d !== undefined);
-  const { groups, missing } = await buildGroupedList(chosen, deps.matcher, deps.plz, household);
+  const pantry = new Set(getPantry(deps.db, deps.week));
+  const { groups, missing, inPantry } = await buildGroupedList(chosen, deps.matcher, deps.plz, household, pantry);
 
   if (groups.length === 0 && missing.length === 0) return "Список пуст.";
 
@@ -158,6 +161,7 @@ export async function handleList(deps: {
     }
   }
   if (missing.length) lines.push(`\n*Докупить (не в акции):* ${missing.join(", ")}`);
+  if (inPantry.length) lines.push(`\n✅ Уже дома: ${inPantry.join(", ")}`);
   return lines.join("\n");
 }
 
@@ -261,4 +265,29 @@ export async function handleScaleDish(
   const scaled = scaleIngredients(dish.ingredients, dish.servings, targetServings);
   const lines = scaled.map(fmtIngredient);
   return `🍳 ${dish.nameRu} ×${targetServings} порц.:\n${lines.join("\n")}`;
+}
+
+type PantryDeps = { db: Database; week: string };
+
+/** Add free-text items to the week's pantry. */
+export function handleAddPantry(deps: PantryDeps, names: string[]): string {
+  const items = names.map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (items.length === 0) return "Что у тебя есть дома? Например: «у меня есть рис, лук».";
+  addToPantry(deps.db, deps.week, items);
+  return `✅ Дома есть: ${items.join(", ")}. Учту в /list.`;
+}
+
+/** Remove items from the week's pantry. */
+export function handleRemovePantry(deps: PantryDeps, names: string[]): string {
+  const items = names.map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (items.length === 0) return "Что закончилось? Например: «закончился рис».";
+  removeFromPantry(deps.db, deps.week, items);
+  return `✅ Убрал из дома: ${items.join(", ")}.`;
+}
+
+/** Show the week's pantry. */
+export function handleShowPantry(deps: PantryDeps): string {
+  const items = getPantry(deps.db, deps.week);
+  if (items.length === 0) return "Дома пока ничего не отмечено. Напиши «у меня есть рис, лук».";
+  return `🏠 Дома есть: ${items.join(", ")}`;
 }

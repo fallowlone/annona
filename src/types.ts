@@ -56,6 +56,9 @@ export type IntentKind =
   | "remove_dishes"
   | "add_custom_dish"
   | "delete_dish"
+  | "add_pantry"
+  | "remove_pantry"
+  | "show_pantry"
   | "scale_dish"
   | "show_menu"
   | "show_list"
@@ -68,4 +71,4 @@ export type StoreGroup = {
   mapsUrl: string;
   items: { ingredient: string; product: string; price: number; qty: number | null; unit: string | null }[];
 };
-export type GroupedShoppingList = { groups: StoreGroup[]; missing: string[] };
+export type GroupedShoppingList = { groups: StoreGroup[]; missing: string[]; inPantry: string[] };

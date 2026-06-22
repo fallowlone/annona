@@ -58,4 +58,9 @@ export const MIGRATIONS: string[] = [
      dish_ids_json TEXT NOT NULL,
      updated_at TEXT NOT NULL
    );`,
+  `CREATE TABLE IF NOT EXISTS pantry (
+     week TEXT PRIMARY KEY,
+     items_json TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );`,
 ];

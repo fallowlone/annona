@@ -2,6 +2,7 @@ import type { Dish, GroupedShoppingList, StoreGroup } from "./types";
 import type { Matcher } from "./matcher";
 import { canonicalStore, mapsLink, type StoreKey } from "./stores";
 import { scaleIngredients } from "./scale";
+import { normalizePantryItem } from "./recipes/pantryStore";
 
 type Bucket = { unit: string | null; qty: number | null };
 
@@ -17,13 +18,20 @@ export async function buildGroupedList(
   dishes: Dish[],
   matcher: Matcher,
   plz: number,
-  targetServings?: number
+  targetServings?: number,
+  pantry?: Set<string>
 ): Promise<GroupedShoppingList> {
   // canonical → unit → summed scaled qty. Insertion order is preserved.
   const agg = new Map<string, Map<string, Bucket>>();
+  const inPantrySeen = new Map<string, string>(); // normalized → original casing (distinct)
   for (const dish of dishes) {
     const scaled = scaleIngredients(dish.ingredients, dish.servings, targetServings ?? dish.servings);
     for (const ing of scaled) {
+      const norm = normalizePantryItem(ing.canonical);
+      if (pantry && pantry.has(norm)) {
+        if (!inPantrySeen.has(norm)) inPantrySeen.set(norm, ing.canonical);
+        continue;
+      }
       let byUnit = agg.get(ing.canonical);
       if (!byUnit) {
         byUnit = new Map();
@@ -62,5 +70,5 @@ export async function buildGroupedList(
     }
   }
 
-  return { groups: [...groups.values()], missing };
+  return { groups: [...groups.values()], missing, inPantry: [...inPantrySeen.values()] };
 }

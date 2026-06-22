@@ -90,3 +90,28 @@ test("buildGroupedList leaves a null-qty ingredient without a quantity", async (
   const list = await buildGroupedList([d1], oneOffer, 30459, 8);
   expect(list.groups[0]!.items[0]).toMatchObject({ ingredient: "соль", qty: null });
 });
+
+test("buildGroupedList excludes pantry ingredients from groups and missing", async () => {
+  const d = dishOf(4, [
+    { canonical: "рис", qty: 1, unit: "кг" },
+    { canonical: "мясо", qty: 1, unit: "кг" },
+  ]);
+  const list = await buildGroupedList([d], oneOffer, 30459, 4, new Set(["рис"]));
+  const shown = list.groups.flatMap((g) => g.items.map((i) => i.ingredient));
+  expect(shown).not.toContain("рис");
+  expect(shown).toContain("мясо");
+  expect(list.inPantry).toEqual(["рис"]);
+});
+
+test("buildGroupedList pantry match is case-insensitive and keeps inPantry distinct", async () => {
+  const d = dishOf(4, [{ canonical: "Лук", qty: 1, unit: "шт" }]);
+  const list = await buildGroupedList([d, d], oneOffer, 30459, 4, new Set(["лук"]));
+  expect(list.groups.flatMap((g) => g.items.map((i) => i.ingredient))).toEqual([]);
+  expect(list.inPantry).toEqual(["Лук"]);
+});
+
+test("buildGroupedList without a pantry returns an empty inPantry", async () => {
+  const d = dishOf(4, [{ canonical: "рис", qty: 1, unit: "кг" }]);
+  const list = await buildGroupedList([d], oneOffer, 30459, 4);
+  expect(list.inPantry).toEqual([]);
+});

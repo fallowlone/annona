@@ -2,11 +2,12 @@ import { test, expect } from "bun:test";
 import { createBot } from "../src/bot/bot";
 import { openDb } from "../src/db/db";
 import { insertDish, listDishes } from "../src/recipes/recipeStore";
-import { getSelection } from "../src/recipes/selectionStore";
+import { getSelection, saveSelection } from "../src/recipes/selectionStore";
 import { isoWeek } from "../src/util/week";
 import type { Dish } from "../src/types";
 import type { Matcher } from "../src/matcher";
 import type { Llm } from "../src/llm/llm";
+import { getPantry } from "../src/recipes/pantryStore";
 
 const USER = 111;
 
@@ -48,6 +49,8 @@ function harness(db: ReturnType<typeof openDb>, dishes: Dish[], llm: Llm, matche
 }
 
 function textUpdate(text: string, from = USER) {
+  const isCmd = text.startsWith("/");
+  const cmdLength = isCmd ? (text.split(" ")[0]?.length ?? text.length) : 0;
   return {
     update_id: Math.floor(text.length + from),
     message: {
@@ -55,6 +58,7 @@ function textUpdate(text: string, from = USER) {
       chat: { id: from, type: "private" },
       from: { id: from, is_bot: false, first_name: "U" },
       text,
+      ...(isCmd ? { entities: [{ type: "bot_command", offset: 0, length: cmdLength }] } : {}),
     },
   } as never;
 }
@@ -96,4 +100,34 @@ test("routes 'добавь блюдо X' to a preview with an inline keyboard (n
   expect(String(msg?.payload.text)).toContain("Шакшука");
   expect(msg?.payload.reply_markup).toBeDefined(); // confirm/cancel buttons
   expect(listDishes(db)).toHaveLength(0); // nothing saved until confirmed
+});
+
+test("'у меня есть рис' persists to the week's pantry", async () => {
+  const db = openDb(":memory:");
+  const { bot } = harness(db, [], llmResolve([]));
+  await bot.handleUpdate(textUpdate("у меня есть рис"));
+  expect(getPantry(db, isoWeek(new Date()))).toContain("рис");
+});
+
+test("pantry ingredients are hidden from /list", async () => {
+  const db = openDb(":memory:");
+  const dish: Dish = {
+    nameRu: "Плов", nameUa: null, nameDe: null, cuisine: "ru", course: "second",
+    keepsDays: 3, tags: [], servings: 4,
+    ingredients: [{ canonical: "рис", qty: 1, unit: "кг" }, { canonical: "мясо", qty: 1, unit: "кг" }],
+  };
+  const id = insertDish(db, dish);
+  saveSelection(db, isoWeek(new Date()), [id]);
+  const matcher: Matcher = {
+    async searchTerms() { return []; },
+    async matchIngredient(c) {
+      return { externalId: 1, store: "aldi", storeName: "Aldi", product: c, price: 1, oldPrice: null, referencePrice: null, unit: "kg", validFrom: "", validTo: "" };
+    },
+  };
+  const { bot, sent } = harness(db, [{ ...dish, id }], llmResolve([id]), matcher);
+  await bot.handleUpdate(textUpdate("у меня есть рис"));
+  await bot.handleUpdate(textUpdate("/list", USER));
+  const out = lastText(sent);
+  expect(out).toContain("Уже дома");
+  expect(out).toContain("мясо");
 });
