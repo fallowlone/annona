@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { openDb } from "../src/db/db";
-import { insertDish, listDishes, getIngredients, seedDishes, generateDish, deleteDish, DishSeedSchema, dishIdByName, seedClassics, CIS_CLASSICS } from "../src/recipes/recipeStore";
+import { insertDish, listDishes, getIngredients, seedDishes, generateDish, deleteDish, DishSeedSchema, dishIdByName, seedClassics, CIS_CLASSICS, dishSteps, saveDishSteps, generateSteps } from "../src/recipes/recipeStore";
 import type { Dish } from "../src/types";
 import type { Llm } from "../src/llm/llm";
 
@@ -234,4 +234,23 @@ test("seedClassics is idempotent — a second run adds nothing", async () => {
   const second = await seedClassics(db, llm);
   expect(second).toBe(0);
   expect(listDishes(db).filter((d) => d.nameRu === CIS_CLASSICS[0]).length).toBe(1);
+});
+
+test("saveDishSteps + dishSteps round-trip; null before save", () => {
+  const db = openDb(":memory:");
+  const id = insertDish(db, borscht);
+  expect(dishSteps(db, id)).toBeNull();
+  saveDishSteps(db, id, "1. Налей воду.\n2. Свари свёклу.");
+  expect(dishSteps(db, id)).toContain("Свари свёклу");
+});
+
+test("generateSteps asks the LLM and returns the steps text", async () => {
+  const llm: Llm = {
+    async structured(args: { toolName?: string }) {
+      expect(args.toolName).toBe("save_steps");
+      return { steps: "1. Шаг один.\n2. Шаг два." } as never;
+    },
+  };
+  const steps = await generateSteps(llm, borscht);
+  expect(steps).toContain("Шаг один");
 });

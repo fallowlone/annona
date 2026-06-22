@@ -32,6 +32,8 @@ const GenerateDishSchema: z.ZodType<{ dish: Dish }> = z.object({
   dish: DishSchema,
 }) as unknown as z.ZodType<{ dish: Dish }>;
 
+const StepsSchema = z.object({ steps: z.string().min(1) });
+
 // ── Row types ──────────────────────────────────────────────────────────────
 
 type DishRow = {
@@ -145,6 +147,35 @@ export function dishIdByName(db: Database, name: string): number | null {
     .all();
   const match = rows.find((r) => r.name_ru.toLowerCase() === needle);
   return match ? match.id : null;
+}
+
+/** Return a dish's cached cooking steps, or null if not yet generated. */
+export function dishSteps(db: Database, dishId: number): string | null {
+  const row = db.query("SELECT steps FROM dishes WHERE id = ?").get(dishId) as { steps: string | null } | null;
+  return row?.steps ?? null;
+}
+
+/** Persist generated cooking steps for a dish. */
+export function saveDishSteps(db: Database, dishId: number, steps: string): void {
+  db.run("UPDATE dishes SET steps = ? WHERE id = ?", [steps, dishId]);
+}
+
+/** Generate numbered Russian cooking steps for a dish from its name + ingredients. */
+export async function generateSteps(llm: Llm, dish: Dish): Promise<string> {
+  const ings = dish.ingredients
+    .map((i) => (i.qty !== null ? `${i.canonical} ${i.qty}${i.unit ? ` ${i.unit}` : ""}` : i.canonical))
+    .join(", ");
+  const out = await llm.structured({
+    system: "Ты повар. Пиши простые домашние рецепты на русском, нумерованными шагами.",
+    prompt:
+      `Напиши пошаговый рецепт блюда «${dish.nameRu}» на ${dish.servings} порц. ` +
+      `Ингредиенты: ${ings}. Верни нумерованные шаги (1., 2., …), кратко и по делу.`,
+    toolName: "save_steps",
+    description: "Persist the recipe cooking steps",
+    schema: StepsSchema,
+    maxTokens: 1024,
+  });
+  return out.steps;
 }
 
 // ── LLM seeding ───────────────────────────────────────────────────────────

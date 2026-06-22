@@ -27,6 +27,7 @@ export type Dish = {
   cuisine: string; // 'ru' | 'ua'
   course?: "first" | "second" | null; // soup/porridge = first, main = second
   keepsDays?: number; // days the cooked dish keeps; default 1
+  steps?: string | null; // cooking steps, lazily generated; null until first view
   tags: string[];
   servings: number;
   ingredients: Ingredient[];

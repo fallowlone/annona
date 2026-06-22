@@ -16,6 +16,11 @@ export const COLUMN_MIGRATIONS: ColumnMigration[] = [
     column: "keeps_days",
     ddl: "ALTER TABLE dishes ADD COLUMN keeps_days INTEGER NOT NULL DEFAULT 1",
   },
+  {
+    table: "dishes",
+    column: "steps",
+    ddl: "ALTER TABLE dishes ADD COLUMN steps TEXT",
+  },
 ];
 
 export function applyColumnMigrations(db: Database): void {
