@@ -162,13 +162,15 @@ export function saveDishSteps(db: Database, dishId: number, steps: string): void
 
 /** Generate numbered Russian cooking steps for a dish from its name + ingredients. */
 export async function generateSteps(llm: Llm, dish: Dish): Promise<string> {
+  // Neutralize guillemet/quote delimiter-breakout and cap length before interpolating into the prompt.
+  const safeName = dish.nameRu.replace(/[«»"]/g, "'").slice(0, 120);
   const ings = dish.ingredients
     .map((i) => (i.qty !== null ? `${i.canonical} ${i.qty}${i.unit ? ` ${i.unit}` : ""}` : i.canonical))
     .join(", ");
   const out = await llm.structured({
     system: "Ты повар. Пиши простые домашние рецепты на русском, нумерованными шагами.",
     prompt:
-      `Напиши пошаговый рецепт блюда «${dish.nameRu}» на ${dish.servings} порц. ` +
+      `Напиши пошаговый рецепт блюда «${safeName}» на ${dish.servings} порц. ` +
       `Ингредиенты: ${ings}. Верни нумерованные шаги (1., 2., …), кратко и по делу.`,
     toolName: "save_steps",
     description: "Persist the recipe cooking steps",
