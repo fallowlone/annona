@@ -193,6 +193,17 @@ test("two unmatched dishes are offered one at a time; ✅ then ❌ summarized", 
   expect(listDishes(db).map((d) => d.nameRu)).toEqual(["Солянка"]);
 });
 
+test("/start shows the main menu hub with inline buttons", async () => {
+  const db = openDb(":memory:");
+  const { bot, sent } = harness(db, [], llmResolve([]));
+  await bot.handleUpdate(textUpdate("/start"));
+  const hub = sent.find((s) => s.method === "sendMessage" && s.payload.reply_markup);
+  expect(hub).toBeDefined();
+  const kb = JSON.stringify(hub!.payload.reply_markup);
+  expect(kb).toContain("Меню недели");
+  expect(kb).toContain("Кладовка");
+});
+
 test("generation failure for an unmatched dish is skipped, not crashed", async () => {
   const db = openDb(":memory:");
   const llm: Llm = {

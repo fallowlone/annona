@@ -29,6 +29,7 @@ import { routeMessage } from "./router";
 import { listDishes } from "../recipes/recipeStore";
 import { isoWeek } from "../util/week";
 import { log, errInfo } from "../log";
+import { createMenus } from "./menus";
 
 const DEFAULT_HOUSEHOLD = 2;
 
@@ -67,6 +68,13 @@ export function createBot(deps: {
   };
 
   const week = () => isoWeek(new Date());
+
+  const menus = createMenus({
+    db: deps.db, matcher: deps.matcher, llm: deps.llm,
+    menuDays: deps.menuDays, householdSize: household, plz: deps.plz, week,
+    coverageMin: deps.coverageMin, digestLimit: deps.digestLimit,
+  });
+  bot.use(menus.main);
 
   const suggest = (ctx: Context) =>
     handleRecommend({
@@ -198,7 +206,9 @@ export function createBot(deps: {
     }
   };
 
-  bot.command("start", (ctx) => reply(ctx, helpText()));
+  bot.command("start", async (ctx) => {
+    await ctx.reply(helpText(), { reply_markup: menus.main });
+  });
   bot.command("digest", guard(suggest));
   bot.command("menu", guard(menu));
   bot.command("list", guard(list));
