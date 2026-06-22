@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { openDb } from "../src/db/db";
-import { insertDish, listDishes, getIngredients, seedDishes, generateDish, deleteDish, DishSeedSchema, dishIdByName } from "../src/recipes/recipeStore";
+import { insertDish, listDishes, getIngredients, seedDishes, generateDish, deleteDish, DishSeedSchema, dishIdByName, seedClassics, CIS_CLASSICS } from "../src/recipes/recipeStore";
 import type { Dish } from "../src/types";
 import type { Llm } from "../src/llm/llm";
 
@@ -205,4 +205,33 @@ test("dishIdByName finds a dish case-insensitively, null when absent", () => {
   expect(dishIdByName(db, "борщ")).toBe(id);
   expect(dishIdByName(db, "БОРЩ")).toBe(id);
   expect(dishIdByName(db, "суши")).toBeNull();
+});
+
+test("seedClassics guarantees every CIS classic is catalogued", async () => {
+  const db = openDb(":memory:");
+  const llm: Llm = {
+    async structured(args: { prompt?: string }) {
+      const m = String(args.prompt).match(/the single dish "([^"]+)"/);
+      const name = m?.[1] ?? "X";
+      return { dish: { nameRu: name, nameUa: null, nameDe: null, cuisine: "ru", course: "second", keepsDays: 2, tags: [], servings: 4, ingredients: [{ canonical: "соль", qty: null, unit: null }] } } as never;
+    },
+  };
+  const added = await seedClassics(db, llm);
+  const names = listDishes(db).map((d) => d.nameRu);
+  for (const c of CIS_CLASSICS) expect(names).toContain(c);
+  expect(added).toBe(CIS_CLASSICS.length);
+});
+
+test("seedClassics is idempotent — a second run adds nothing", async () => {
+  const db = openDb(":memory:");
+  const llm: Llm = {
+    async structured(args: { prompt?: string }) {
+      const m = String(args.prompt).match(/the single dish "([^"]+)"/);
+      return { dish: { nameRu: m?.[1] ?? "X", nameUa: null, nameDe: null, cuisine: "ru", course: "second", keepsDays: 2, tags: [], servings: 4, ingredients: [{ canonical: "соль", qty: null, unit: null }] } } as never;
+    },
+  };
+  await seedClassics(db, llm);
+  const second = await seedClassics(db, llm);
+  expect(second).toBe(0);
+  expect(listDishes(db).filter((d) => d.nameRu === CIS_CLASSICS[0]).length).toBe(1);
 });

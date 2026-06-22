@@ -196,6 +196,41 @@ export async function seedDishes(db: Database, llm: Llm, target: number): Promis
   return added;
 }
 
+/** Curated CIS staples the catalogue must always contain. */
+export const CIS_CLASSICS: string[] = [
+  "Солянка мясная сборная",
+  "Рассольник",
+  "Окрошка",
+  "Борщ",
+  "Плов",
+  "Голубцы",
+  "Вареники с картошкой",
+  "Пельмени",
+  "Гречка с грибами",
+  "Оливье",
+  "Винегрет",
+  "Котлеты с пюре",
+];
+
+/**
+ * Ensure every CIS_CLASSICS dish is in the catalogue. Generates only the missing
+ * ones (by name_ru, case-insensitive) and is idempotent. Returns the number added.
+ */
+export async function seedClassics(db: Database, llm: Llm): Promise<number> {
+  const existing = db.query("SELECT name_ru FROM dishes").all() as { name_ru: string }[];
+  const seen = new Set<string>(existing.map((r) => r.name_ru.toLowerCase()));
+  let added = 0;
+  for (const name of CIS_CLASSICS) {
+    if (seen.has(name.toLowerCase())) continue;
+    const dish = await generateDish(llm, name);
+    if (seen.has(dish.nameRu.toLowerCase())) continue; // generated canonical already present
+    insertDish(db, dish);
+    seen.add(dish.nameRu.toLowerCase());
+    added++;
+  }
+  return added;
+}
+
 /**
  * Generate a single dish record from just its name via the LLM (same catalogue
  * conventions as `seedDishes`). Returns a validated Dish; the caller persists it.
