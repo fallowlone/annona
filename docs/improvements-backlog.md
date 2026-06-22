@@ -21,7 +21,7 @@ Prioritized by impact / effort. Captured 2026-06-22 after the Phase 3 release
 | 8 | Structured logger with levels (replace `console.*`) | `console.error(e)` can leak prompt/user data into logs; no levels | S | ✅ done — `src/log.ts` (JSON, `errInfo` redacts) |
 | 9 | Custom-dish confirm/preview before persisting to the catalogue | LLM dishes are saved unchecked — garbage accumulates forever | M | ✅ done — `previewCustomDish`/`confirmCustomDish` + inline ✅/❌ |
 | 10 | "Remove dish from catalogue" command | Catalogue only grows; no delete path | M | ✅ done — `удали блюдо X`/`/delrecipe` + inline 🗑/❌ confirm |
-| 11 | Integration test for `bot.ts` routing | Only file with no automated coverage (manual smoke only) | M | |
+| 11 | Integration test for `bot.ts` routing | Only file with no automated coverage (manual smoke only) | M | ✅ done — `tests/bot.test.ts` (handleUpdate + API transformer) |
 
 ## P2 — features (deferred non-goals)
 
