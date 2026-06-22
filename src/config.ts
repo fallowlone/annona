@@ -22,7 +22,7 @@ const schema = z.object({
   PROXY_MODE: z.enum(["none", "pool", "service"]).default("none"),
   STORE_WHITELIST: z
     .string()
-    .default("lidl,penny,kaufland,edeka,dm,aldi,netto,rewe")
+    .default("lidl,penny,edeka,dm,aldi,netto,rewe")
     .transform((s) => s.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean))
     .pipe(z.array(z.enum(STORE_KEYS)).min(1)),
   OFFER_COVERAGE_MIN: z.coerce.number().min(0).max(1).default(0.7),
