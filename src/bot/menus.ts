@@ -42,7 +42,7 @@ export function createMenus(deps: MenuDeps): { main: Menu<Context> } {
   const selected = new Map<number, number>(); // userId → dish id whose card is open
 
   // ── Dish card ──────────────────────────────────────────────────────────────
-  const card = new Menu<Context>("annona-card")
+  const card = new Menu<Context>("annona-card", { autoAnswer: false })
     .text("📖 Показать рецепт", async (ctx) => {
       const uid = ctx.from?.id ?? 0;
       const id = selected.get(uid);
@@ -62,6 +62,7 @@ export function createMenus(deps: MenuDeps): { main: Menu<Context> } {
           return;
         }
       }
+      await ctx.answerCallbackQuery();
       await ctx.editMessageText(renderDishCard(dish, await costText(deps.matcher, dish), steps), {
         parse_mode: "HTML",
       });
@@ -88,11 +89,12 @@ export function createMenus(deps: MenuDeps): { main: Menu<Context> } {
       selected.delete(uid);
       await ctx.answerCallbackQuery("Удалил из каталога");
       ctx.menu.nav("annona-recipes");
+      await ctx.menu.update({ immediate: true });
     })
     .back("⬅️ Назад");
 
   // ── Recipe browser (paginated list) ──────────────────────────────────────────
-  const recipes = new Menu<Context>("annona-recipes").dynamic((ctx, range) => {
+  const recipes = new Menu<Context>("annona-recipes", { autoAnswer: false }).dynamic((ctx, range) => {
     const uid = ctx.from?.id ?? 0;
     const all = listDishes(deps.db);
     const { slice, page, pages } = paginate(all, browserPage.get(uid) ?? 0, PER_PAGE);
@@ -112,28 +114,32 @@ export function createMenus(deps: MenuDeps): { main: Menu<Context> } {
     }
 
     range
-      .text("⬅️", (ctx) => {
+      .text("⬅️", async (ctx) => {
         browserPage.set(uid, Math.max((browserPage.get(uid) ?? 0) - 1, 0));
         ctx.menu.update();
+        await ctx.answerCallbackQuery();
       })
       .text(`${page + 1}/${pages}`, (ctx) => ctx.answerCallbackQuery())
-      .text("➡️", (ctx) => {
+      .text("➡️", async (ctx) => {
         browserPage.set(uid, Math.min((browserPage.get(uid) ?? 0) + 1, pages - 1));
         ctx.menu.update();
+        await ctx.answerCallbackQuery();
       })
       .row()
       .back("🏠 Домой");
   });
 
   // ── Hub ──────────────────────────────────────────────────────────────────────
-  const main = new Menu<Context>("annona-main")
+  const main = new Menu<Context>("annona-main", { autoAnswer: false })
     .text("📋 Меню недели", async (ctx) => {
+      await ctx.answerCallbackQuery();
       await ctx.reply(
         await handleMenu({ db: deps.db, dishes: listDishes(deps.db), matcher: deps.matcher, week: deps.week(), menuDays: deps.menuDays, householdSize: deps.householdSize }),
         { parse_mode: "Markdown" }
       );
     })
     .text("🛒 Покупки", async (ctx) => {
+      await ctx.answerCallbackQuery();
       await ctx.reply(
         await handleList({ db: deps.db, dishes: listDishes(deps.db), matcher: deps.matcher, week: deps.week(), plz: deps.plz, householdSize: deps.householdSize }),
         { parse_mode: "Markdown" }
@@ -141,12 +147,14 @@ export function createMenus(deps: MenuDeps): { main: Menu<Context> } {
     })
     .row()
     .text("🍳 Что приготовить", async (ctx) => {
+      await ctx.answerCallbackQuery();
       await ctx.reply(
         await handleRecommend({ dishes: listDishes(deps.db), matcher: deps.matcher, coverageMin: deps.coverageMin, limit: deps.digestLimit, householdSize: deps.householdSize }),
         { parse_mode: "Markdown" }
       );
     })
     .text("🥫 Кладовка", async (ctx) => {
+      await ctx.answerCallbackQuery();
       await ctx.reply(handleShowPantry({ db: deps.db, week: deps.week() }));
     })
     .row()
