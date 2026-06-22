@@ -1,7 +1,8 @@
 import { test, expect } from "bun:test";
 import {
   isAllowed, handleRecommend, handleSelect, handleMenu, handleList,
-  handleAddDishes, handleRemoveDishes, previewCustomDish, confirmCustomDish, handleScaleDish,
+  handleAddDishes, handleRemoveDishes, previewCustomDish, confirmCustomDish,
+  previewDeleteDish, confirmDeleteDish, handleScaleDish,
 } from "../src/bot/handlers";
 import type { Dish, Offer } from "../src/types";
 import type { Matcher } from "../src/matcher";
@@ -209,6 +210,30 @@ test("confirmCustomDish is idempotent by name_ru", () => {
   const msg = confirmCustomDish({ db }, shakshuka);
   expect(listDishes(db).filter((d) => d.nameRu === "Шакшука")).toHaveLength(1);
   expect(msg.toLowerCase()).toContain("уже");
+});
+
+test("previewDeleteDish resolves a catalogue dish and previews it without deleting", async () => {
+  const db = openDb(":memory:");
+  const id = insertDish(db, borsch);
+  const dishes = [{ ...borsch, id }];
+  const res = await previewDeleteDish({ llm: llmResolve([id]), db, dishes }, "борщ");
+  expect(res.status).toBe("confirm");
+  expect(res.text).toContain("Борщ");
+  expect(listDishes(db)).toHaveLength(1); // not deleted until confirmed
+});
+
+test("previewDeleteDish reports not found when nothing matches", async () => {
+  const db = openDb(":memory:");
+  const res = await previewDeleteDish({ llm: llmResolve([]), db, dishes: [] }, "суши");
+  expect(res.status).toBe("notfound");
+});
+
+test("confirmDeleteDish removes the dish from the catalogue", () => {
+  const db = openDb(":memory:");
+  const id = insertDish(db, borsch);
+  const msg = confirmDeleteDish({ db }, id);
+  expect(listDishes(db)).toHaveLength(0);
+  expect(msg).toContain("Удалил");
 });
 
 test("handleScaleDish scales a dish's ingredient quantities to the target", async () => {

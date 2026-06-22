@@ -55,6 +55,7 @@ export type IntentKind =
   | "add_dishes"
   | "remove_dishes"
   | "add_custom_dish"
+  | "delete_dish"
   | "scale_dish"
   | "show_menu"
   | "show_list"

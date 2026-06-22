@@ -88,6 +88,15 @@ export function insertDish(db: Database, dish: Dish): number {
   return insert() as number;
 }
 
+/** Delete a dish and its ingredients in one transaction (no FK pragma reliance). */
+export function deleteDish(db: Database, dishId: number): void {
+  const tx = db.transaction(() => {
+    db.run("DELETE FROM ingredients WHERE dish_id = ?", [dishId]);
+    db.run("DELETE FROM dishes WHERE id = ?", [dishId]);
+  });
+  tx();
+}
+
 /** Return all dishes ordered by id, each with their ingredients. */
 export function listDishes(db: Database): Dish[] {
   const dishRows = db

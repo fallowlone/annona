@@ -106,3 +106,19 @@ test("still routes a sane serving count", () => {
 test("drops a pathologically long dish name (defers to the LLM)", () => {
   expect(routeMessage("добавь блюдо " + "я".repeat(300))).toBeNull();
 });
+
+test("routes 'удали блюдо X' to delete_dish (catalogue), not remove_dishes", () => {
+  expect(routeMessage("удали блюдо борщ")).toEqual({ kind: "delete_dish", dishNames: ["борщ"] });
+});
+
+test("routes 'убери блюдо X' to delete_dish", () => {
+  expect(routeMessage("убери блюдо плов")).toEqual({ kind: "delete_dish", dishNames: ["плов"] });
+});
+
+test("routes '/delrecipe X' to delete_dish", () => {
+  expect(routeMessage("/delrecipe борщ")).toEqual({ kind: "delete_dish", dishNames: ["борщ"] });
+});
+
+test("'удали X' (no 'блюдо') still means remove from the week", () => {
+  expect(routeMessage("удали борщ")).toEqual({ kind: "remove_dishes", dishNames: ["борщ"] });
+});

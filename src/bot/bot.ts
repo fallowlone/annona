@@ -13,6 +13,8 @@ import {
   handleRemoveDishes,
   previewCustomDish,
   confirmCustomDish,
+  previewDeleteDish,
+  confirmDeleteDish,
   handleScaleDish,
   helpText,
 } from "./handlers";
@@ -83,7 +85,8 @@ export function createBot(deps: {
   const removeDishes = (names: string[]) =>
     handleRemoveDishes({ llm: deps.llm, db: deps.db, dishes, week: week() }, names);
 
-  const pendingDish = new Map<number, Dish>(); // userId → dish awaiting confirm
+  const pendingDish = new Map<number, Dish>(); // userId → dish awaiting save-confirm
+  const pendingDelete = new Map<number, number>(); // userId → dishId awaiting delete-confirm
 
   const startCustomDish = async (ctx: Context, name: string) => {
     const clean = name.trim();
@@ -100,6 +103,24 @@ export function createBot(deps: {
     await ctx.reply(res.text, {
       parse_mode: "Markdown",
       reply_markup: new InlineKeyboard().text("✅ Сохранить", "dish_save").text("❌ Отмена", "dish_cancel"),
+    });
+  };
+
+  const startDeleteDish = async (ctx: Context, name: string) => {
+    const clean = name.trim();
+    if (!clean) {
+      await reply(ctx, "Напиши название: «удали блюдо борщ».");
+      return;
+    }
+    const res = await previewDeleteDish({ llm: deps.llm, db: deps.db, dishes }, clean);
+    if (res.status !== "confirm" || !ctx.from) {
+      await reply(ctx, res.text);
+      return;
+    }
+    pendingDelete.set(ctx.from.id, res.dishId);
+    await ctx.reply(res.text, {
+      parse_mode: "Markdown",
+      reply_markup: new InlineKeyboard().text("🗑 Удалить", "del_confirm").text("❌ Отмена", "del_cancel"),
     });
   };
 
@@ -124,6 +145,7 @@ export function createBot(deps: {
   bot.command("add", guard(async (ctx) => reply(ctx, await addDishes(parseNames(matchText(ctx))))));
   bot.command("remove", guard(async (ctx) => reply(ctx, await removeDishes(parseNames(matchText(ctx))))));
   bot.command("recipe", guard((ctx) => startCustomDish(ctx, matchText(ctx))));
+  bot.command("delrecipe", guard((ctx) => startDeleteDish(ctx, matchText(ctx))));
 
   bot.on("message:text", guard(async (ctx) => {
     const text = ctx.message?.text ?? "";
@@ -140,6 +162,9 @@ export function createBot(deps: {
         break;
       case "add_custom_dish":
         await startCustomDish(ctx, intent.dishNames[0] ?? "");
+        break;
+      case "delete_dish":
+        await startDeleteDish(ctx, intent.dishNames[0] ?? "");
         break;
       case "scale_dish":
         await reply(ctx, await scaleDish(intent.dishNames[0] ?? "", intent.targetServings ?? household));
@@ -176,6 +201,26 @@ export function createBot(deps: {
     await ctx.answerCallbackQuery();
     if (ctx.from) pendingDish.delete(ctx.from.id);
     await reply(ctx, "Отменил, в каталог не добавил.");
+  }));
+
+  bot.callbackQuery("del_confirm", guard(async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const uid = ctx.from?.id;
+    const dishId = uid !== undefined ? pendingDelete.get(uid) : undefined;
+    if (uid === undefined || dishId === undefined) {
+      await reply(ctx, "Нечего удалять — попробуй заново.");
+      return;
+    }
+    pendingDelete.delete(uid);
+    const msg = confirmDeleteDish({ db: deps.db }, dishId);
+    dishes = listDishes(deps.db); // refresh catalogue after removal
+    await reply(ctx, msg);
+  }));
+
+  bot.callbackQuery("del_cancel", guard(async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (ctx.from) pendingDelete.delete(ctx.from.id);
+    await reply(ctx, "Отменил, блюдо не удалил.");
   }));
 
   return bot;

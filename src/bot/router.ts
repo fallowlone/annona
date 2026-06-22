@@ -14,6 +14,8 @@ function names(rest: string): string[] {
 
 const ADD_CUSTOM = [/^добавь\s+блюдо\s+(.+)$/i, /^новое\s+блюдо\s+(.+)$/i, /^\/recipe\s+(.+)$/i];
 const ADD = [/^добавь\s+(.+)$/i, /^\+\s*(.+)$/i];
+// "удали блюдо X" deletes from the catalogue — checked before the week-removal verbs.
+const DELETE_CUSTOM = [/^удали\s+блюдо\s+(.+)$/i, /^убери\s+блюдо\s+(.+)$/i, /^\/delrecipe\s+(.+)$/i];
 const REMOVE = [/^убери\s+(.+)$/i, /^удали\s+(.+)$/i, /^минус\s+(.+)$/i, /^-\s*(.+)$/i];
 const SCALE = /^(.+?)\s+на\s+(\d+)\s*порц/i;
 
@@ -39,6 +41,14 @@ export function routeMessage(text: string): Intent | null {
     if (m) {
       const n = names(m[1]!);
       return n.length ? { kind: "add_dishes", dishNames: n } : null;
+    }
+  }
+
+  for (const re of DELETE_CUSTOM) {
+    const m = t.match(re);
+    if (m) {
+      const n = names(m[1]!);
+      return n.length ? { kind: "delete_dish", dishNames: n } : null;
     }
   }
 

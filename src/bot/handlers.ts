@@ -9,7 +9,7 @@ import { buildGroupedList } from "../shoppingList";
 import { scaleIngredients } from "../scale";
 import { coverageDays } from "../portions";
 import { addToSelection, removeFromSelection, saveSelection, getSelection } from "../recipes/selectionStore";
-import { generateDish, insertDish } from "../recipes/recipeStore";
+import { generateDish, insertDish, deleteDish } from "../recipes/recipeStore";
 import type { Ingredient } from "../types";
 
 const DEFAULT_COVERAGE_MIN = 0.7;
@@ -75,6 +75,7 @@ export function helpText(): string {
     "• Напиши блюда через запятую (например «борщ, карбонара, плов») — соберу меню.",
     "• «добавь плов» / «убери борщ» — правка меню на неделю.",
     "• «добавь блюдо шакшука» — своё блюдо в каталог.",
+    "• «удали блюдо шакшука» — убрать блюдо из каталога.",
     "• «плов на 8 порций» — пересчёт ингредиентов.",
     "• /digest — что выгодно приготовить.",
     "• /menu — меню на неделю.",
@@ -221,6 +222,31 @@ export function confirmCustomDish(deps: { db: Database }, dish: Dish): string {
   if (dishExists(deps.db, dish.nameRu)) return `«${dish.nameRu}» уже в каталоге.`;
   insertDish(deps.db, dish);
   return `✅ ${dish.nameRu} (${dish.servings} порц., ${dish.ingredients.length} ингр.) добавил в каталог.`;
+}
+
+export type DeleteDishPreview =
+  | { status: "notfound"; text: string }
+  | { status: "confirm"; text: string; dishId: number; nameRu: string };
+
+/** Resolve a name to a catalogue dish and preview its deletion — does NOT delete. */
+export async function previewDeleteDish(
+  deps: { llm: Llm; db: Database; dishes: Dish[] },
+  name: string
+): Promise<DeleteDishPreview> {
+  const { matched } = await resolveDishes(deps.llm, deps.dishes, [name]);
+  const dish = matched[0];
+  if (!dish || dish.id === undefined) {
+    return { status: "notfound", text: `Не нашёл блюдо «${name}» в каталоге.` };
+  }
+  return { status: "confirm", text: `🗑 Удалить «${dish.nameRu}» из каталога?`, dishId: dish.id, nameRu: dish.nameRu };
+}
+
+/** Delete a catalogue dish by id after the user confirms. */
+export function confirmDeleteDish(deps: { db: Database }, dishId: number): string {
+  const row = deps.db.query("SELECT name_ru FROM dishes WHERE id = ?").get(dishId) as { name_ru: string } | null;
+  if (!row) return "Блюдо уже удалено из каталога.";
+  deleteDish(deps.db, dishId);
+  return `🗑 Удалил «${row.name_ru}» из каталога.`;
 }
 
 /** Scale one dish's ingredients to the requested number of portions. */
