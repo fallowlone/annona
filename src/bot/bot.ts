@@ -17,6 +17,9 @@ import {
   confirmDeleteDish,
   handleScaleDish,
   helpText,
+  handleAddPantry,
+  handleRemovePantry,
+  handleShowPantry,
 } from "./handlers";
 import { classifyIntent } from "./intent";
 import { routeMessage } from "./router";
@@ -146,6 +149,13 @@ export function createBot(deps: {
   bot.command("remove", guard(async (ctx) => reply(ctx, await removeDishes(parseNames(matchText(ctx))))));
   bot.command("recipe", guard((ctx) => startCustomDish(ctx, matchText(ctx))));
   bot.command("delrecipe", guard((ctx) => startDeleteDish(ctx, matchText(ctx))));
+  bot.command("pantry", guard((ctx) => {
+    const arg = matchText(ctx);
+    const msg = arg.trim()
+      ? handleAddPantry({ db: deps.db, week: week() }, arg.split(",").map((s) => s.trim()).filter(Boolean))
+      : handleShowPantry({ db: deps.db, week: week() });
+    return reply(ctx, msg);
+  }));
 
   bot.on("message:text", guard(async (ctx) => {
     const text = ctx.message?.text ?? "";
@@ -165,6 +175,15 @@ export function createBot(deps: {
         break;
       case "delete_dish":
         await startDeleteDish(ctx, intent.dishNames[0] ?? "");
+        break;
+      case "add_pantry":
+        await reply(ctx, handleAddPantry({ db: deps.db, week: week() }, intent.dishNames));
+        break;
+      case "remove_pantry":
+        await reply(ctx, handleRemovePantry({ db: deps.db, week: week() }, intent.dishNames));
+        break;
+      case "show_pantry":
+        await reply(ctx, handleShowPantry({ db: deps.db, week: week() }));
         break;
       case "scale_dish":
         await reply(ctx, await scaleDish(intent.dishNames[0] ?? "", intent.targetServings ?? household));
