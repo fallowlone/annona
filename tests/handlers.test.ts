@@ -255,3 +255,37 @@ test("handleMenu surfaces portion coverage for the household", () => {
   expect(text).toContain("Борщ");
   expect(text).toContain("дн"); // coverage days shown
 });
+
+import {
+  handleAddPantry, handleRemovePantry, handleShowPantry,
+} from "../src/bot/handlers";
+import { getPantry } from "../src/recipes/pantryStore";
+
+test("handleAddPantry stores normalized items and confirms", () => {
+  const db = openDb(":memory:");
+  const text = handleAddPantry({ db, week: "2026-W26" }, ["Рис", "лук"]);
+  expect(getPantry(db, "2026-W26")).toEqual(["рис", "лук"]);
+  expect(text).toContain("рис");
+});
+
+test("handleAddPantry prompts when given no items", () => {
+  const db = openDb(":memory:");
+  const text = handleAddPantry({ db, week: "2026-W26" }, []);
+  expect(getPantry(db, "2026-W26")).toEqual([]);
+  expect(text.toLowerCase()).toContain("что");
+});
+
+test("handleRemovePantry removes the named item", () => {
+  const db = openDb(":memory:");
+  handleAddPantry({ db, week: "2026-W26" }, ["рис", "лук"]);
+  const text = handleRemovePantry({ db, week: "2026-W26" }, ["рис"]);
+  expect(getPantry(db, "2026-W26")).toEqual(["лук"]);
+  expect(text).toContain("рис");
+});
+
+test("handleShowPantry lists items or reports empty", () => {
+  const db = openDb(":memory:");
+  expect(handleShowPantry({ db, week: "2026-W26" }).toLowerCase()).toContain("ничего");
+  handleAddPantry({ db, week: "2026-W26" }, ["рис"]);
+  expect(handleShowPantry({ db, week: "2026-W26" })).toContain("рис");
+});
