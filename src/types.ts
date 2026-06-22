@@ -71,4 +71,4 @@ export type StoreGroup = {
   mapsUrl: string;
   items: { ingredient: string; product: string; price: number; qty: number | null; unit: string | null }[];
 };
-export type GroupedShoppingList = { groups: StoreGroup[]; missing: string[] };
+export type GroupedShoppingList = { groups: StoreGroup[]; missing: string[]; inPantry: string[] };
