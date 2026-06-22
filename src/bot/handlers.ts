@@ -69,6 +69,8 @@ export async function handleRecommend(deps: {
 
 const NO_SELECTION = "Сначала выбери блюда: напиши их через запятую, например «борщ, карбонара, плов».";
 
+export type SelectResult = { text: string; unmatched: string[] };
+
 export function helpText(): string {
   return [
     "Я подскажу, что выгодно готовить на этой неделе и где дешевле купить.",
@@ -89,17 +91,16 @@ export function helpText(): string {
 export async function handleSelect(
   deps: { llm: Llm; db: Database; dishes: Dish[]; week: string },
   dishNames: string[]
-): Promise<string> {
+): Promise<SelectResult> {
   const { matched, unmatched } = await resolveDishes(deps.llm, deps.dishes, dishNames);
-  if (matched.length === 0) {
-    return "Не понял, какие блюда добавить. " + NO_SELECTION;
+  if (matched.length === 0 && unmatched.length === 0) {
+    return { text: "Не понял, какие блюда добавить. " + NO_SELECTION, unmatched: [] };
   }
+  if (matched.length === 0) return { text: "", unmatched };
   saveSelection(deps.db, deps.week, matched.map((d) => d.id as number));
   const names = matched.map((d) => d.nameRu).join(", ");
-  let msg = `Записал на эту неделю: ${names}.`;
-  if (unmatched.length) msg += `\nНе нашёл: ${unmatched.join(", ")}.`;
-  msg += "\n\n/menu — меню на неделю · /list — список покупок.";
-  return msg;
+  const text = `Записал на эту неделю: ${names}.\n\n/menu — меню на неделю · /list — список покупок.`;
+  return { text, unmatched };
 }
 
 /** Render the weekly menu from the saved selection. */
@@ -168,14 +169,19 @@ export async function handleList(deps: {
 type EditDeps = { llm: Llm; db: Database; dishes: Dish[]; week: string };
 
 /** Resolve names and merge them into the week's selection (keeps the rest). */
-export async function handleAddDishes(deps: EditDeps, dishNames: string[]): Promise<string> {
+export async function handleAddDishes(deps: EditDeps, dishNames: string[]): Promise<SelectResult> {
   const { matched, unmatched } = await resolveDishes(deps.llm, deps.dishes, dishNames);
-  if (matched.length === 0) return "Не понял, какие блюда добавить. " + NO_SELECTION;
-  addToSelection(deps.db, deps.week, matched.map((d) => d.id as number));
-  let msg = `✅ Добавил: ${matched.map((d) => d.nameRu).join(", ")}.`;
-  if (unmatched.length) msg += `\nНе нашёл: ${unmatched.join(", ")}.`;
-  msg += "\n\n/menu — меню · /list — список покупок.";
-  return msg;
+  if (matched.length === 0 && unmatched.length === 0) {
+    return { text: "Не понял, какие блюда добавить. " + NO_SELECTION, unmatched: [] };
+  }
+  if (matched.length > 0) {
+    addToSelection(deps.db, deps.week, matched.map((d) => d.id as number));
+  }
+  const text =
+    matched.length > 0
+      ? `✅ Добавил: ${matched.map((d) => d.nameRu).join(", ")}.\n\n/menu — меню · /list — список покупок.`
+      : "";
+  return { text, unmatched };
 }
 
 /** Resolve names and remove them from the week's selection (no-op if absent). */

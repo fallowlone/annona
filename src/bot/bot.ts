@@ -20,6 +20,7 @@ import {
   handleAddPantry,
   handleRemovePantry,
   handleShowPantry,
+  type SelectResult,
 } from "./handlers";
 import { classifyIntent } from "./intent";
 import { routeMessage } from "./router";
@@ -88,6 +89,12 @@ export function createBot(deps: {
   const removeDishes = (names: string[]) =>
     handleRemoveDishes({ llm: deps.llm, db: deps.db, dishes, week: week() }, names);
 
+  const replyNamesResult = async (ctx: Context, res: SelectResult): Promise<void> => {
+    let msg = res.text;
+    if (res.unmatched.length) msg += (msg ? "\n" : "") + `Не нашёл: ${res.unmatched.join(", ")}.`;
+    if (msg) await reply(ctx, msg);
+  };
+
   const pendingDish = new Map<number, Dish>(); // userId → dish awaiting save-confirm
   const pendingDelete = new Map<number, number>(); // userId → dishId awaiting delete-confirm
 
@@ -145,7 +152,7 @@ export function createBot(deps: {
   bot.command("digest", guard(suggest));
   bot.command("menu", guard(menu));
   bot.command("list", guard(list));
-  bot.command("add", guard(async (ctx) => reply(ctx, await addDishes(parseNames(matchText(ctx))))));
+  bot.command("add", guard(async (ctx) => replyNamesResult(ctx, await addDishes(parseNames(matchText(ctx))))));
   bot.command("remove", guard(async (ctx) => reply(ctx, await removeDishes(parseNames(matchText(ctx))))));
   bot.command("recipe", guard((ctx) => startCustomDish(ctx, matchText(ctx))));
   bot.command("delrecipe", guard((ctx) => startDeleteDish(ctx, matchText(ctx))));
@@ -162,10 +169,10 @@ export function createBot(deps: {
     const intent = routeMessage(text) ?? (await classifyIntent(deps.llm, text));
     switch (intent.kind) {
       case "select_dishes":
-        await reply(ctx, await handleSelect({ llm: deps.llm, db: deps.db, dishes, week: week() }, intent.dishNames));
+        await replyNamesResult(ctx, await handleSelect({ llm: deps.llm, db: deps.db, dishes, week: week() }, intent.dishNames));
         break;
       case "add_dishes":
-        await reply(ctx, await addDishes(intent.dishNames));
+        await replyNamesResult(ctx, await addDishes(intent.dishNames));
         break;
       case "remove_dishes":
         await reply(ctx, await removeDishes(intent.dishNames));

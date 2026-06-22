@@ -107,16 +107,17 @@ test("handleRecommend returns a threshold-aware fallback when nothing qualifies"
 const borsch: Dish = { nameRu: "Борщ", nameUa: null, nameDe: null, cuisine: "ua", course: "first", keepsDays: 4, tags: [], servings: 4, ingredients: [{ canonical: "свёкла", qty: 1, unit: "кг" }] };
 const plov: Dish = { nameRu: "Плов", nameUa: null, nameDe: null, cuisine: "ru", course: "second", keepsDays: 3, tags: [], servings: 4, ingredients: [{ canonical: "рис", qty: 1, unit: "кг" }] };
 
-test("handleSelect resolves names, saves the selection, and confirms", async () => {
+test("handleSelect resolves names, saves the selection, and reports unmatched separately", async () => {
   const db = openDb(":memory:");
   const id1 = insertDish(db, borsch);
   const id2 = insertDish(db, plov);
   const dishes = [{ ...borsch, id: id1 }, { ...plov, id: id2 }];
   const llm: Llm = { async structured() { return { matchedIds: [id1, id2], unmatched: ["суши"] } as never; } };
-  const text = await handleSelect({ llm, db, dishes, week: "2026-W26" }, ["борщ", "плов", "суши"]);
-  expect(text).toContain("Борщ");
-  expect(text).toContain("Плов");
-  expect(text).toContain("суши"); // reported as not found
+  const res = await handleSelect({ llm, db, dishes, week: "2026-W26" }, ["борщ", "плов", "суши"]);
+  expect(res.text).toContain("Борщ");
+  expect(res.text).toContain("Плов");
+  expect(res.text).not.toContain("суши");
+  expect(res.unmatched).toEqual(["суши"]);
 });
 
 test("handleMenu renders a 7-day menu from the saved selection", () => {
@@ -158,9 +159,10 @@ test("handleAddDishes merges into the existing selection without replacing it", 
   const id2 = insertDish(db, plov);
   const dishes = [{ ...borsch, id: id1 }, { ...plov, id: id2 }];
   saveSelection(db, "2026-W26", [id1]);
-  const text = await handleAddDishes({ llm: llmResolve([id2]), db, dishes, week: "2026-W26" }, ["плов"]);
+  const res = await handleAddDishes({ llm: llmResolve([id2]), db, dishes, week: "2026-W26" }, ["плов"]);
   expect(getSelection(db, "2026-W26")).toEqual([id1, id2]);
-  expect(text).toContain("Плов");
+  expect(res.text).toContain("Плов");
+  expect(res.unmatched).toEqual([]);
 });
 
 test("handleRemoveDishes removes only the named dish", async () => {
