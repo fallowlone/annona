@@ -9,7 +9,7 @@ import { buildGroupedList } from "../shoppingList";
 import { scaleIngredients } from "../scale";
 import { coverageDays } from "../portions";
 import { addToSelection, removeFromSelection, saveSelection, getSelection } from "../recipes/selectionStore";
-import { generateDish, insertDish, deleteDish } from "../recipes/recipeStore";
+import { generateDish, insertDish, deleteDish, dishIdByName } from "../recipes/recipeStore";
 import type { Ingredient } from "../types";
 import { getPantry, addToPantry, removeFromPantry } from "../recipes/pantryStore";
 
@@ -232,6 +232,35 @@ export function confirmCustomDish(deps: { db: Database }, dish: Dish): string {
   if (dishExists(deps.db, dish.nameRu)) return `«${dish.nameRu}» уже в каталоге.`;
   insertDish(deps.db, dish);
   return `✅ ${dish.nameRu} (${dish.servings} порц., ${dish.ingredients.length} ингр.) добавил в каталог.`;
+}
+
+export type GenOutcome =
+  | { status: "preview"; dish: Dish; text: string }
+  | { status: "added"; nameRu: string };
+
+/**
+ * Generate a dish from a free-text name for the weekly-selection miss path.
+ * If the generated dish's canonical name already exists in the catalogue, add
+ * that existing dish to the week and report "added"; otherwise return a preview
+ * (nothing persisted) for the user to confirm.
+ */
+export async function generateForSelection(
+  deps: { llm: Llm; db: Database; week: string },
+  name: string
+): Promise<GenOutcome> {
+  const dish = await generateDish(deps.llm, name);
+  const existingId = dishIdByName(deps.db, dish.nameRu);
+  if (existingId !== null) {
+    addToSelection(deps.db, deps.week, [existingId]);
+    return { status: "added", nameRu: dish.nameRu };
+  }
+  return { status: "preview", dish, text: renderDishPreview(dish) };
+}
+
+/** Persist a previewed dish (idempotent by name_ru) and add it to the week's selection. */
+export function saveDishToWeek(deps: { db: Database }, dish: Dish, week: string): void {
+  const id = dishIdByName(deps.db, dish.nameRu) ?? insertDish(deps.db, dish);
+  addToSelection(deps.db, week, [id]);
 }
 
 export type DeleteDishPreview =

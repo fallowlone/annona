@@ -3,6 +3,7 @@ import {
   isAllowed, handleRecommend, handleSelect, handleMenu, handleList,
   handleAddDishes, handleRemoveDishes, previewCustomDish, confirmCustomDish,
   previewDeleteDish, confirmDeleteDish, handleScaleDish,
+  generateForSelection, saveDishToWeek,
 } from "../src/bot/handlers";
 import type { Dish, Offer } from "../src/types";
 import type { Matcher } from "../src/matcher";
@@ -293,6 +294,42 @@ test("handleShowPantry lists items or reports empty", () => {
 });
 
 import { addToPantry } from "../src/recipes/pantryStore";
+
+test("generateForSelection previews a brand-new dish without persisting", async () => {
+  const db = openDb(":memory:");
+  const sol: Dish = { nameRu: "Солянка", nameUa: null, nameDe: null, cuisine: "ru", course: "first", keepsDays: 3, tags: [], servings: 6, ingredients: [{ canonical: "колбаса", qty: 300, unit: "г" }] };
+  const res = await generateForSelection({ llm: llmDish(sol), db, week: "2026-W26" }, "солянка");
+  expect(res.status).toBe("preview");
+  if (res.status === "preview") expect(res.text).toContain("Солянка");
+  expect(listDishes(db)).toHaveLength(0);
+  expect(getSelection(db, "2026-W26")).toBeNull();
+});
+
+test("generateForSelection adds an already-catalogued dish to the week", async () => {
+  const db = openDb(":memory:");
+  const id = insertDish(db, borsch); // "Борщ"
+  const res = await generateForSelection({ llm: llmDish({ ...borsch }), db, week: "2026-W26" }, "борщец");
+  expect(res.status).toBe("added");
+  if (res.status === "added") expect(res.nameRu).toBe("Борщ");
+  expect(getSelection(db, "2026-W26")).toEqual([id]);
+  expect(listDishes(db)).toHaveLength(1); // no duplicate inserted
+});
+
+test("saveDishToWeek inserts a new dish and adds it to the week", () => {
+  const db = openDb(":memory:");
+  const sol: Dish = { nameRu: "Солянка", nameUa: null, nameDe: null, cuisine: "ru", course: "first", keepsDays: 3, tags: [], servings: 6, ingredients: [{ canonical: "колбаса", qty: 300, unit: "г" }] };
+  saveDishToWeek({ db }, sol, "2026-W26");
+  const id = listDishes(db).find((d) => d.nameRu === "Солянка")!.id!;
+  expect(getSelection(db, "2026-W26")).toEqual([id]);
+});
+
+test("saveDishToWeek is idempotent on name_ru", () => {
+  const db = openDb(":memory:");
+  const id = insertDish(db, borsch);
+  saveDishToWeek({ db }, { ...borsch }, "2026-W26");
+  expect(listDishes(db).filter((d) => d.nameRu === "Борщ")).toHaveLength(1);
+  expect(getSelection(db, "2026-W26")).toEqual([id]);
+});
 
 test("handleList hides pantry ingredients and shows an 'Уже дома' footer", async () => {
   const db = openDb(":memory:");
