@@ -289,3 +289,27 @@ test("handleShowPantry lists items or reports empty", () => {
   handleAddPantry({ db, week: "2026-W26" }, ["рис"]);
   expect(handleShowPantry({ db, week: "2026-W26" })).toContain("рис");
 });
+
+import { addToPantry } from "../src/recipes/pantryStore";
+
+test("handleList hides pantry ingredients and shows an 'Уже дома' footer", async () => {
+  const db = openDb(":memory:");
+  const dish: Dish = {
+    nameRu: "Плов", nameUa: null, nameDe: null, cuisine: "ru", course: "second",
+    keepsDays: 3, tags: [], servings: 4,
+    ingredients: [{ canonical: "рис", qty: 1, unit: "кг" }, { canonical: "мясо", qty: 1, unit: "кг" }],
+  };
+  const id = insertDish(db, dish);
+  saveSelection(db, "2026-W26", [id]);
+  addToPantry(db, "2026-W26", ["рис"]);
+  const matcher: Matcher = {
+    async searchTerms() { return []; },
+    async matchIngredient(c) {
+      return { externalId: 1, store: "aldi", storeName: "Aldi", product: c, price: 1, oldPrice: null, referencePrice: null, unit: "kg", validFrom: "", validTo: "" };
+    },
+  };
+  const text = await handleList({ db, dishes: [{ ...dish, id }], matcher, week: "2026-W26", plz: 30459 });
+  expect(text).toContain("Уже дома");
+  expect(text).toContain("рис");
+  expect(text).toContain("мясо");
+});

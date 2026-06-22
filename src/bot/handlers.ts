@@ -146,7 +146,8 @@ export async function handleList(deps: {
   const household = deps.householdSize ?? DEFAULT_HOUSEHOLD;
   const byId = new Map(deps.dishes.filter((d) => d.id !== undefined).map((d) => [d.id as number, d]));
   const chosen = ids.map((id) => byId.get(id)).filter((d): d is Dish => d !== undefined);
-  const { groups, missing } = await buildGroupedList(chosen, deps.matcher, deps.plz, household);
+  const pantry = new Set(getPantry(deps.db, deps.week));
+  const { groups, missing, inPantry } = await buildGroupedList(chosen, deps.matcher, deps.plz, household, pantry);
 
   if (groups.length === 0 && missing.length === 0) return "Список пуст.";
 
@@ -159,6 +160,7 @@ export async function handleList(deps: {
     }
   }
   if (missing.length) lines.push(`\n*Докупить (не в акции):* ${missing.join(", ")}`);
+  if (inPantry.length) lines.push(`\n✅ Уже дома: ${inPantry.join(", ")}`);
   return lines.join("\n");
 }
 
