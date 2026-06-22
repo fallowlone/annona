@@ -66,6 +66,39 @@ function textUpdate(text: string, from = USER) {
 const lastText = (sent: Sent[]): string =>
   String(sent.filter((s) => s.method === "sendMessage").at(-1)?.payload.text ?? "");
 
+let cbId = 0;
+function callbackUpdate(data: string, from = USER) {
+  cbId += 1;
+  return {
+    update_id: 10000 + cbId,
+    callback_query: {
+      id: "cb" + cbId,
+      from: { id: from, is_bot: false, first_name: "U" },
+      chat_instance: "ci",
+      message: { message_id: 1, date: 0, chat: { id: from, type: "private" }, from: { id: 1, is_bot: true, first_name: "T" }, text: "preview" },
+      data,
+    },
+  } as never;
+}
+
+// resolve_dishes → {matchedIds, unmatched}; save_dish → {dish: byName(<name>)}
+function llmResolveAndGen(matchedIds: number[], unmatched: string[], byName: (name: string) => Dish): Llm {
+  return {
+    async structured(args: { toolName?: string; prompt?: string }) {
+      if (args.toolName === "save_dish") {
+        const m = String(args.prompt).match(/the single dish "([^"]+)"/);
+        return { dish: byName(m?.[1] ?? "") } as never;
+      }
+      return { matchedIds, unmatched } as never; // resolve_dishes
+    },
+  };
+}
+
+const dish = (nameRu: string): Dish => ({
+  nameRu, nameUa: null, nameDe: null, cuisine: "ru", course: "second",
+  keepsDays: 2, tags: [], servings: 4, ingredients: [{ canonical: "соль", qty: null, unit: null }],
+});
+
 test("ignores messages from a non-whitelisted user", async () => {
   const db = openDb(":memory:");
   const { bot, sent } = harness(db, [], llmResolve([]));
@@ -130,4 +163,47 @@ test("pantry ingredients are hidden from /list", async () => {
   const out = lastText(sent);
   expect(out).toContain("Уже дома");
   expect(out).toContain("мясо");
+});
+
+test("listing a dish not in the catalogue offers to generate it; ✅ adds it to week + catalogue", async () => {
+  const db = openDb(":memory:");
+  const { bot, sent } = harness(db, [], llmResolveAndGen([], ["солянка"], () => dish("Солянка")));
+  await bot.handleUpdate(textUpdate("добавь солянка"));
+  const preview = sent.find((s) => s.method === "sendMessage" && String(s.payload.text).includes("Солянка") && s.payload.reply_markup);
+  expect(preview).toBeDefined();           // preview with ✅/❌
+  expect(listDishes(db)).toHaveLength(0);  // nothing saved yet
+  await bot.handleUpdate(callbackUpdate("gen_yes"));
+  const id = listDishes(db).find((d) => d.nameRu === "Солянка")?.id ?? null;
+  expect(id).not.toBeNull();
+  expect(getSelection(db, isoWeek(new Date()))).toContain(id);
+});
+
+test("two unmatched dishes are offered one at a time; ✅ then ❌ summarized", async () => {
+  const db = openDb(":memory:");
+  const byName = (n: string) => dish(n === "солянка" ? "Солянка" : "Рагу");
+  const { bot, sent } = harness(db, [], llmResolveAndGen([], ["солянка", "рагу"], byName));
+  await bot.handleUpdate(textUpdate("добавь солянка, рагу"));
+  expect(sent.some((s) => String(s.payload.text).includes("Солянка") && s.payload.reply_markup)).toBe(true);
+  await bot.handleUpdate(callbackUpdate("gen_yes")); // save Солянка → offer Рагу
+  expect(sent.some((s) => String(s.payload.text).includes("Рагу") && s.payload.reply_markup)).toBe(true);
+  await bot.handleUpdate(callbackUpdate("gen_no"));  // skip Рагу → summary
+  const out = lastText(sent);
+  expect(out).toContain("Солянка"); // added
+  expect(out).toContain("Рагу");    // skipped
+  expect(listDishes(db).map((d) => d.nameRu)).toEqual(["Солянка"]);
+});
+
+test("generation failure for an unmatched dish is skipped, not crashed", async () => {
+  const db = openDb(":memory:");
+  const llm: Llm = {
+    async structured(args: { toolName?: string }) {
+      if (args.toolName === "save_dish") throw new Error("llm down");
+      return { matchedIds: [], unmatched: ["боб"] } as never;
+    },
+  };
+  const { bot, sent } = harness(db, [], llm);
+  await bot.handleUpdate(textUpdate("добавь боб"));
+  const out = lastText(sent);
+  expect(out).toContain("Не получилось сгенерировать");
+  expect(out).not.toContain("Упс"); // guard's crash message must not appear
 });

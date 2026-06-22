@@ -20,6 +20,8 @@ import {
   handleAddPantry,
   handleRemovePantry,
   handleShowPantry,
+  generateForSelection,
+  saveDishToWeek,
   type SelectResult,
 } from "./handlers";
 import { classifyIntent } from "./intent";
@@ -89,10 +91,56 @@ export function createBot(deps: {
   const removeDishes = (names: string[]) =>
     handleRemoveDishes({ llm: deps.llm, db: deps.db, dishes, week: week() }, names);
 
-  const replyNamesResult = async (ctx: Context, res: SelectResult): Promise<void> => {
-    let msg = res.text;
-    if (res.unmatched.length) msg += (msg ? "\n" : "") + `Не нашёл: ${res.unmatched.join(", ")}.`;
-    if (msg) await reply(ctx, msg);
+  type GenState = { queue: string[]; week: string; added: string[]; skipped: string[]; failed: string[] };
+  const pendingGen = new Map<number, GenState & { dish: Dish }>(); // userId → current preview + remaining queue
+
+  const genSummary = (st: GenState): string => {
+    const parts: string[] = [];
+    if (st.added.length) parts.push(`✅ Добавил в неделю и каталог: ${st.added.join(", ")}.`);
+    if (st.skipped.length) parts.push(`Пропустил: ${st.skipped.join(", ")}.`);
+    if (st.failed.length) parts.push(`Не получилось сгенерировать: ${st.failed.join(", ")}.`);
+    if (parts.length === 0) parts.push("Готово.");
+    return parts.join("\n") + "\n\n/menu — меню · /list — список покупок.";
+  };
+
+  // Pop names off the queue, generating each. Existing dishes join the week silently;
+  // brand-new dishes pause the queue with a confirm preview. Empty queue → summary.
+  const offerNext = async (ctx: Context, uid: number, st: GenState): Promise<void> => {
+    while (st.queue.length > 0) {
+      const name = st.queue.shift()!;
+      let outcome;
+      try {
+        outcome = await generateForSelection({ llm: deps.llm, db: deps.db, week: st.week }, name);
+      } catch (e) {
+        log.error("gen_on_miss_failed", { userId: uid, name, ...errInfo(e) });
+        st.failed.push(name);
+        continue;
+      }
+      if (outcome.status === "added") {
+        dishes = listDishes(deps.db);
+        st.added.push(outcome.nameRu);
+        continue;
+      }
+      pendingGen.set(uid, { ...st, dish: outcome.dish });
+      await ctx.reply(outcome.text, {
+        parse_mode: "Markdown",
+        reply_markup: new InlineKeyboard().text("✅ Сохранить", "gen_yes").text("❌ Пропустить", "gen_no"),
+      });
+      return;
+    }
+    pendingGen.delete(uid);
+    await reply(ctx, genSummary(st));
+  };
+
+  const startGenQueue = async (ctx: Context, names: string[], wk: string): Promise<void> => {
+    if (!ctx.from) return;
+    await reply(ctx, `Не нашёл в каталоге: ${names.join(", ")}. Сгенерировать рецепт?`);
+    await offerNext(ctx, ctx.from.id, { queue: [...names], week: wk, added: [], skipped: [], failed: [] });
+  };
+
+  const replyNamesResult = async (ctx: Context, res: SelectResult, wk: string): Promise<void> => {
+    if (res.text) await reply(ctx, res.text);
+    if (res.unmatched.length) await startGenQueue(ctx, res.unmatched, wk);
   };
 
   const pendingDish = new Map<number, Dish>(); // userId → dish awaiting save-confirm
@@ -152,7 +200,7 @@ export function createBot(deps: {
   bot.command("digest", guard(suggest));
   bot.command("menu", guard(menu));
   bot.command("list", guard(list));
-  bot.command("add", guard(async (ctx) => replyNamesResult(ctx, await addDishes(parseNames(matchText(ctx))))));
+  bot.command("add", guard(async (ctx) => replyNamesResult(ctx, await addDishes(parseNames(matchText(ctx))), week())));
   bot.command("remove", guard(async (ctx) => reply(ctx, await removeDishes(parseNames(matchText(ctx))))));
   bot.command("recipe", guard((ctx) => startCustomDish(ctx, matchText(ctx))));
   bot.command("delrecipe", guard((ctx) => startDeleteDish(ctx, matchText(ctx))));
@@ -169,10 +217,10 @@ export function createBot(deps: {
     const intent = routeMessage(text) ?? (await classifyIntent(deps.llm, text));
     switch (intent.kind) {
       case "select_dishes":
-        await replyNamesResult(ctx, await handleSelect({ llm: deps.llm, db: deps.db, dishes, week: week() }, intent.dishNames));
+        await replyNamesResult(ctx, await handleSelect({ llm: deps.llm, db: deps.db, dishes, week: week() }, intent.dishNames), week());
         break;
       case "add_dishes":
-        await replyNamesResult(ctx, await addDishes(intent.dishNames));
+        await replyNamesResult(ctx, await addDishes(intent.dishNames), week());
         break;
       case "remove_dishes":
         await reply(ctx, await removeDishes(intent.dishNames));
@@ -207,6 +255,34 @@ export function createBot(deps: {
       default:
         await reply(ctx, helpText());
     }
+  }));
+
+  bot.callbackQuery("gen_yes", guard(async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const uid = ctx.from?.id;
+    const st = uid !== undefined ? pendingGen.get(uid) : undefined;
+    if (uid === undefined || !st) {
+      await reply(ctx, "Нет блюда для сохранения — начни заново.");
+      return;
+    }
+    pendingGen.delete(uid);
+    saveDishToWeek({ db: deps.db }, st.dish, st.week);
+    dishes = listDishes(deps.db); // refresh catalogue so the new dish is selectable now
+    st.added.push(st.dish.nameRu);
+    await offerNext(ctx, uid, { queue: st.queue, week: st.week, added: st.added, skipped: st.skipped, failed: st.failed });
+  }));
+
+  bot.callbackQuery("gen_no", guard(async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const uid = ctx.from?.id;
+    const st = uid !== undefined ? pendingGen.get(uid) : undefined;
+    if (uid === undefined || !st) {
+      await reply(ctx, "Нечего пропускать — начни заново.");
+      return;
+    }
+    pendingGen.delete(uid);
+    st.skipped.push(st.dish.nameRu);
+    await offerNext(ctx, uid, { queue: st.queue, week: st.week, added: st.added, skipped: st.skipped, failed: st.failed });
   }));
 
   bot.callbackQuery("dish_save", guard(async (ctx) => {
