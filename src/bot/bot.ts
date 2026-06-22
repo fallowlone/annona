@@ -19,6 +19,7 @@ import { classifyIntent } from "./intent";
 import { routeMessage } from "./router";
 import { listDishes } from "../recipes/recipeStore";
 import { isoWeek } from "../util/week";
+import { log, errInfo } from "../log";
 
 const DEFAULT_HOUSEHOLD = 2;
 
@@ -46,7 +47,7 @@ export function createBot(deps: {
 
   bot.use(async (ctx, next) => {
     if (!isAllowed(ctx.from?.id, deps.allowedUserIds)) {
-      console.warn("Ignored message from non-whitelisted user id:", ctx.from?.id);
+      log.warn("ignored_non_whitelisted", { userId: ctx.from?.id });
       return;
     }
     await next();
@@ -97,7 +98,7 @@ export function createBot(deps: {
       await fn(ctx);
     } catch (e) {
       await ctx.reply("Упс, что-то пошло не так. Попробуй позже.");
-      console.error("Handler error for user", ctx.from?.id, e);
+      log.error("handler_error", { userId: ctx.from?.id, ...errInfo(e) });
     }
   };
 

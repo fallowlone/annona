@@ -2,6 +2,7 @@ import { loadConfig } from "../config";
 import { openDb } from "../db/db";
 import { createLlm } from "../llm/llm";
 import { seedDishes } from "./recipeStore";
+import { log, errInfo } from "../log";
 
 try {
   const cfg = loadConfig(Bun.env);
@@ -11,8 +12,8 @@ try {
     createLlm({ apiKey: cfg.anthropicApiKey, model: cfg.llmModel }),
     110
   );
-  console.log(`seeded ${n} new dishes (catalogue target 110)`);
+  log.info("seeded_dishes", { count: n, target: 110 });
 } catch (error) {
-  console.error("Failed to seed dishes:", error instanceof Error ? error.message : String(error));
+  log.error("seed_failed", errInfo(error));
   process.exit(1);
 }

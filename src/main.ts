@@ -7,6 +7,7 @@ import { createMatcher } from "./matcher";
 import { listDishes } from "./recipes/recipeStore";
 import { isoWeek } from "./util/week";
 import { createBot } from "./bot/bot";
+import { log, errInfo } from "./log";
 import type { StoreKey } from "./stores";
 
 const cfg = loadConfig(Bun.env);
@@ -19,7 +20,7 @@ const whitelist = new Set<StoreKey>(cfg.storeWhitelist);
 const matcher = createMatcher({ db, llm, provider, week: () => isoWeek(new Date()), whitelist });
 const dishes = listDishes(db);
 
-if (dishes.length === 0) console.warn("No dishes yet — run `bun run seed` first.");
+if (dishes.length === 0) log.warn("no_dishes_seeded", { hint: "run `bun run seed`" });
 
 const bot = createBot({
   token: cfg.telegramBotToken,
@@ -34,8 +35,8 @@ const bot = createBot({
   coverageMin: cfg.offerCoverageMin,
   digestLimit: cfg.digestLimit,
 });
-console.log("Annona bot starting…");
+log.info("bot_starting");
 bot.start().catch((e) => {
-  console.error("Bot failed to start:", e);
+  log.error("bot_start_failed", errInfo(e));
   process.exit(1);
 });
