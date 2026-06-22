@@ -28,6 +28,10 @@ export const DishSeedSchema: z.ZodType<{ dishes: Dish[] }> = z.object({
   dishes: z.array(DishSchema),
 }) as unknown as z.ZodType<{ dishes: Dish[] }>;
 
+const GenerateDishSchema: z.ZodType<{ dish: Dish }> = z.object({
+  dish: DishSchema,
+}) as unknown as z.ZodType<{ dish: Dish }>;
+
 // ── Row types ──────────────────────────────────────────────────────────────
 
 type DishRow = {
@@ -171,4 +175,26 @@ export async function seedDishes(db: Database, llm: Llm, target: number): Promis
     if (batchAdded === 0) break; // model produced nothing new — stop rather than loop forever
   }
   return added;
+}
+
+/**
+ * Generate a single dish record from just its name via the LLM (same catalogue
+ * conventions as `seedDishes`). Returns a validated Dish; the caller persists it.
+ */
+export async function generateDish(llm: Llm, name: string): Promise<Dish> {
+  const out = await llm.structured({
+    system:
+      "You are a chef cataloguing home dishes a CIS family can cook in Germany: mostly Ukrainian and Russian classics, plus globally popular dishes.",
+    prompt:
+      `Describe the single dish "${name}". Provide nameRu, nameUa (or null), nameDe (or null), ` +
+      `cuisine (short code like 'ru'|'ua'|'it'), course ('first' for soups/porridge, 'second' for mains), ` +
+      `keepsDays (integer 1-5: how many days the cooked dish keeps in a fridge), tags (array of strings), ` +
+      `servings (integer), and ingredients with canonical Russian names, qty (number or null) and ` +
+      `unit (string or null). Use ingredients buyable in German supermarkets.`,
+    toolName: "save_dish",
+    description: "Persist one generated dish",
+    schema: GenerateDishSchema,
+    maxTokens: 1024,
+  });
+  return out.dish;
 }

@@ -1,8 +1,21 @@
 import { test, expect } from "bun:test";
 import { openDb } from "../src/db/db";
-import { insertDish, listDishes, getIngredients, seedDishes, DishSeedSchema } from "../src/recipes/recipeStore";
+import { insertDish, listDishes, getIngredients, seedDishes, generateDish, DishSeedSchema } from "../src/recipes/recipeStore";
 import type { Dish } from "../src/types";
 import type { Llm } from "../src/llm/llm";
+
+test("generateDish asks the LLM for a single dish and returns it validated", async () => {
+  const dish: Dish = {
+    nameRu: "Шакшука", nameUa: null, nameDe: null, cuisine: "il",
+    course: "second", keepsDays: 1, tags: ["завтрак"], servings: 4,
+    ingredients: [{ canonical: "яйца", qty: 4, unit: "шт" }, { canonical: "помидоры", qty: 400, unit: "г" }],
+  };
+  const llm: Llm = { async structured() { return { dish } as never; } };
+  const out = await generateDish(llm, "шакшука");
+  expect(out.nameRu).toBe("Шакшука");
+  expect(out.servings).toBe(4);
+  expect(out.ingredients).toHaveLength(2);
+});
 
 const borscht: Dish = {
   nameRu: "Борщ", nameUa: "Борщ", nameDe: "Borschtsch", cuisine: "ua",
