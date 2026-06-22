@@ -1,4 +1,5 @@
 import type { Dish, Offer, RankedDish, ShoppingItem } from "./types";
+import { dishCostFromMatches } from "./cost";
 
 // We surface the package price (`Offer.price`) here — the shelf price the family
 // actually pays — NOT `effectiveUnitPrice` (`referencePrice ?? price`). marktguru's
@@ -12,14 +13,10 @@ export function rankDishes(
 ): RankedDish[] {
   const ranked: RankedDish[] = dishes.map((dish) => {
     let onOfferCount = 0;
-    let estTotal = 0;
     for (const ing of dish.ingredients) {
-      const m = matches.get(ing.canonical);
-      if (m) {
-        onOfferCount++;
-        estTotal += m.price;
-      }
+      if (matches.get(ing.canonical)) onOfferCount++;
     }
+    const estTotal = dishCostFromMatches(dish, matches);
     const total = dish.ingredients.length;
     const coverage = total === 0 ? 0 : onOfferCount / total;
     return { dish, onOfferCount, estTotal, coverage };
