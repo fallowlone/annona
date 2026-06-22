@@ -202,6 +202,27 @@ test("/start shows the main menu hub with inline buttons", async () => {
   const kb = JSON.stringify(hub!.payload.reply_markup);
   expect(kb).toContain("Меню недели");
   expect(kb).toContain("Кладовка");
+  expect(kb).toContain("Рецепты");
+});
+
+// Structural smoke for the recipe browser. The deep "tap a dish → list buttons"
+// path can't be driven here: @grammyjs/menu embeds an opaque, non-deterministic
+// fingerprint in each button's callback_data (e.g. "annona-main/2/0//h\t:w…"),
+// so asserting against a guessed callback string would be brittle. We assert the
+// hub exposes the "📖 Рецепты" submenu button; the live list/card navigation is
+// covered by the recipeView unit tests + the deploy smoke.
+test("the hub exposes the 📖 Рецепты submenu button", async () => {
+  const db = openDb(":memory:");
+  insertDish(db, {
+    nameRu: "Борщ", nameUa: null, nameDe: null, cuisine: "ua", course: "first",
+    keepsDays: 4, tags: [], servings: 4, ingredients: [{ canonical: "свёкла", qty: 1, unit: "кг" }],
+  });
+  const { bot, sent } = harness(db, listDishes(db), llmResolve([]));
+  await bot.handleUpdate(textUpdate("/start"));
+  const hub = sent.find((s) => s.method === "sendMessage" && s.payload.reply_markup);
+  expect(hub).toBeDefined();
+  const kb = JSON.stringify(hub!.payload.reply_markup);
+  expect(kb).toContain("Рецепты"); // submenu entry point into the paginated browser
 });
 
 test("generation failure for an unmatched dish is skipped, not crashed", async () => {
