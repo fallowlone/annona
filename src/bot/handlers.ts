@@ -183,16 +183,42 @@ export async function handleRemoveDishes(deps: EditDeps, dishNames: string[]): P
   return msg;
 }
 
-/** Generate a dish from its name via the LLM and persist it to the catalogue. */
-export async function handleAddCustomDish(
+/** True if a dish with this name_ru (case-insensitive) is already catalogued. */
+function dishExists(db: Database, name: string): boolean {
+  return db.query("SELECT 1 FROM dishes WHERE lower(name_ru) = lower(?)").get(name) !== null;
+}
+
+/** Human-readable preview of a generated dish, asking the user to confirm. */
+function renderDishPreview(dish: Dish): string {
+  const course = dish.course === "first" ? "первое" : "второе";
+  const ings = dish.ingredients
+    .map((i) => (i.qty !== null ? `${i.canonical} ${i.qty}${i.unit ? ` ${i.unit}` : ""}` : i.canonical))
+    .join(", ");
+  return [
+    `🍽 *${dish.nameRu}* — добавить в каталог?`,
+    `${course} · ${dish.servings} порц. · хранится ~${dish.keepsDays ?? 1} дн.`,
+    `Ингредиенты: ${ings}`,
+  ].join("\n");
+}
+
+export type CustomDishPreview =
+  | { status: "exists"; text: string }
+  | { status: "preview"; text: string; dish: Dish };
+
+/** Generate a dish from its name via the LLM and return a preview — does NOT persist. */
+export async function previewCustomDish(
   deps: { llm: Llm; db: Database },
   name: string
-): Promise<string> {
-  const exists = (n: string) =>
-    deps.db.query("SELECT 1 FROM dishes WHERE lower(name_ru) = lower(?)").get(n) !== null;
-  if (exists(name)) return `«${name}» уже в каталоге.`;
+): Promise<CustomDishPreview> {
+  if (dishExists(deps.db, name)) return { status: "exists", text: `«${name}» уже в каталоге.` };
   const dish = await generateDish(deps.llm, name);
-  if (exists(dish.nameRu)) return `«${dish.nameRu}» уже в каталоге.`;
+  if (dishExists(deps.db, dish.nameRu)) return { status: "exists", text: `«${dish.nameRu}» уже в каталоге.` };
+  return { status: "preview", text: renderDishPreview(dish), dish };
+}
+
+/** Persist a previewed dish after the user confirms. Idempotent by name_ru. */
+export function confirmCustomDish(deps: { db: Database }, dish: Dish): string {
+  if (dishExists(deps.db, dish.nameRu)) return `«${dish.nameRu}» уже в каталоге.`;
   insertDish(deps.db, dish);
   return `✅ ${dish.nameRu} (${dish.servings} порц., ${dish.ingredients.length} ингр.) добавил в каталог.`;
 }

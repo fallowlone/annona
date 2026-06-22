@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import {
   isAllowed, handleRecommend, handleSelect, handleMenu, handleList,
-  handleAddDishes, handleRemoveDishes, handleAddCustomDish, handleScaleDish,
+  handleAddDishes, handleRemoveDishes, previewCustomDish, confirmCustomDish, handleScaleDish,
 } from "../src/bot/handlers";
 import type { Dish, Offer } from "../src/types";
 import type { Matcher } from "../src/matcher";
@@ -180,19 +180,35 @@ const shakshuka: Dish = {
 };
 const llmDish = (d: Dish): Llm => ({ async structured() { return { dish: d } as never; } });
 
-test("handleAddCustomDish generates and persists a new catalogue dish", async () => {
+test("previewCustomDish returns a preview WITHOUT persisting", async () => {
   const db = openDb(":memory:");
-  const text = await handleAddCustomDish({ llm: llmDish(shakshuka), db }, "шакшука");
-  expect(listDishes(db).map((d) => d.nameRu)).toContain("Шакшука");
-  expect(text).toContain("Шакшука");
+  const res = await previewCustomDish({ llm: llmDish(shakshuka), db }, "шакшука");
+  expect(res.status).toBe("preview");
+  expect(res.text).toContain("Шакшука");
+  expect(listDishes(db)).toHaveLength(0); // nothing saved until confirmed
 });
 
-test("handleAddCustomDish is idempotent by name_ru", async () => {
+test("previewCustomDish reports an already-catalogued dish (no preview)", async () => {
   const db = openDb(":memory:");
   insertDish(db, shakshuka);
-  const text = await handleAddCustomDish({ llm: llmDish(shakshuka), db }, "шакшука");
+  const res = await previewCustomDish({ llm: llmDish(shakshuka), db }, "шакшука");
+  expect(res.status).toBe("exists");
+  expect(res.text.toLowerCase()).toContain("уже");
+});
+
+test("confirmCustomDish persists the previewed dish", () => {
+  const db = openDb(":memory:");
+  const msg = confirmCustomDish({ db }, shakshuka);
+  expect(listDishes(db).map((d) => d.nameRu)).toContain("Шакшука");
+  expect(msg).toContain("Шакшука");
+});
+
+test("confirmCustomDish is idempotent by name_ru", () => {
+  const db = openDb(":memory:");
+  confirmCustomDish({ db }, shakshuka);
+  const msg = confirmCustomDish({ db }, shakshuka);
   expect(listDishes(db).filter((d) => d.nameRu === "Шакшука")).toHaveLength(1);
-  expect(text.toLowerCase()).toContain("уже");
+  expect(msg.toLowerCase()).toContain("уже");
 });
 
 test("handleScaleDish scales a dish's ingredient quantities to the target", async () => {

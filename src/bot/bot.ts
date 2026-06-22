@@ -1,4 +1,4 @@
-import { Bot, type Context } from "grammy";
+import { Bot, InlineKeyboard, type Context } from "grammy";
 import { Database } from "bun:sqlite";
 import type { Dish } from "../types";
 import type { Matcher } from "../matcher";
@@ -11,7 +11,8 @@ import {
   handleList,
   handleAddDishes,
   handleRemoveDishes,
-  handleAddCustomDish,
+  previewCustomDish,
+  confirmCustomDish,
   handleScaleDish,
   helpText,
 } from "./handlers";
@@ -82,10 +83,24 @@ export function createBot(deps: {
   const removeDishes = (names: string[]) =>
     handleRemoveDishes({ llm: deps.llm, db: deps.db, dishes, week: week() }, names);
 
-  const addCustom = async (name: string) => {
-    const msg = await handleAddCustomDish({ llm: deps.llm, db: deps.db }, name);
-    dishes = listDishes(deps.db); // refresh catalogue so the new dish is selectable now
-    return msg;
+  const pendingDish = new Map<number, Dish>(); // userId → dish awaiting confirm
+
+  const startCustomDish = async (ctx: Context, name: string) => {
+    const clean = name.trim();
+    if (!clean) {
+      await reply(ctx, "Напиши название блюда: «добавь блюдо шакшука».");
+      return;
+    }
+    const res = await previewCustomDish({ llm: deps.llm, db: deps.db }, clean);
+    if (res.status !== "preview" || !ctx.from) {
+      await reply(ctx, res.text);
+      return;
+    }
+    pendingDish.set(ctx.from.id, res.dish);
+    await ctx.reply(res.text, {
+      parse_mode: "Markdown",
+      reply_markup: new InlineKeyboard().text("✅ Сохранить", "dish_save").text("❌ Отмена", "dish_cancel"),
+    });
   };
 
   const scaleDish = (name: string, target: number) =>
@@ -108,7 +123,7 @@ export function createBot(deps: {
   bot.command("list", guard(list));
   bot.command("add", guard(async (ctx) => reply(ctx, await addDishes(parseNames(matchText(ctx))))));
   bot.command("remove", guard(async (ctx) => reply(ctx, await removeDishes(parseNames(matchText(ctx))))));
-  bot.command("recipe", guard(async (ctx) => reply(ctx, await addCustom(matchText(ctx).trim()))));
+  bot.command("recipe", guard((ctx) => startCustomDish(ctx, matchText(ctx))));
 
   bot.on("message:text", guard(async (ctx) => {
     const text = ctx.message?.text ?? "";
@@ -124,7 +139,7 @@ export function createBot(deps: {
         await reply(ctx, await removeDishes(intent.dishNames));
         break;
       case "add_custom_dish":
-        await reply(ctx, await addCustom(intent.dishNames[0] ?? ""));
+        await startCustomDish(ctx, intent.dishNames[0] ?? "");
         break;
       case "scale_dish":
         await reply(ctx, await scaleDish(intent.dishNames[0] ?? "", intent.targetServings ?? household));
@@ -141,6 +156,26 @@ export function createBot(deps: {
       default:
         await reply(ctx, helpText());
     }
+  }));
+
+  bot.callbackQuery("dish_save", guard(async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const uid = ctx.from?.id;
+    const dish = uid !== undefined ? pendingDish.get(uid) : undefined;
+    if (uid === undefined || !dish) {
+      await reply(ctx, "Нет блюда для сохранения — сгенерируй заново.");
+      return;
+    }
+    pendingDish.delete(uid);
+    const msg = confirmCustomDish({ db: deps.db }, dish);
+    dishes = listDishes(deps.db); // refresh catalogue so the new dish is selectable now
+    await reply(ctx, msg);
+  }));
+
+  bot.callbackQuery("dish_cancel", guard(async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (ctx.from) pendingDish.delete(ctx.from.id);
+    await reply(ctx, "Отменил, в каталог не добавил.");
   }));
 
   return bot;
