@@ -16,6 +16,8 @@ const llmResolve = (matchedIds: number[], unmatched: string[] = []): Llm => ({
   async structured() { return { matchedIds, unmatched } as never; },
 });
 
+const noOffers: Matcher = { async searchTerms() { return []; }, async matchIngredient() { return null; } };
+
 test("isAllowed enforces the whitelist", () => {
   expect(isAllowed(111, [111, 222])).toBe(true);
   expect(isAllowed(999, [111, 222])).toBe(false);
@@ -121,20 +123,20 @@ test("handleSelect resolves names, saves the selection, and reports unmatched se
   expect(res.unmatched).toEqual(["суши"]);
 });
 
-test("handleMenu renders a 7-day menu from the saved selection", () => {
+test("handleMenu renders a 7-day menu from the saved selection", async () => {
   const db = openDb(":memory:");
   const id1 = insertDish(db, borsch);
   const id2 = insertDish(db, plov);
   const dishes = [{ ...borsch, id: id1 }, { ...plov, id: id2 }];
   saveSelection(db, "2026-W26", [id1, id2]);
-  const text = handleMenu({ db, dishes, week: "2026-W26", menuDays: 7 });
+  const text = await handleMenu({ db, dishes, matcher: noOffers, week: "2026-W26", menuDays: 7 });
   expect(text).toContain("Борщ"); // first course
   expect(text).toContain("Плов"); // second course
 });
 
-test("handleMenu asks for a selection when none is saved", () => {
+test("handleMenu asks for a selection when none is saved", async () => {
   const db = openDb(":memory:");
-  const text = handleMenu({ db, dishes: [], week: "2026-W26", menuDays: 7 });
+  const text = await handleMenu({ db, dishes: [], matcher: noOffers, week: "2026-W26", menuDays: 7 });
   expect(text).toContain("выбери блюда");
 });
 
@@ -249,12 +251,12 @@ test("handleScaleDish scales a dish's ingredient quantities to the target", asyn
   expect(text).toContain("2"); // 1кг at 4 servings → 2кг at 8
 });
 
-test("handleMenu surfaces portion coverage for the household", () => {
+test("handleMenu surfaces portion coverage for the household", async () => {
   const db = openDb(":memory:");
   const id1 = insertDish(db, borsch);
   const dishes = [{ ...borsch, id: id1 }];
   saveSelection(db, "2026-W26", [id1]);
-  const text = handleMenu({ db, dishes, week: "2026-W26", menuDays: 7, householdSize: 2 });
+  const text = await handleMenu({ db, dishes, matcher: noOffers, week: "2026-W26", menuDays: 7, householdSize: 2 });
   expect(text).toContain("Борщ");
   expect(text).toContain("дн"); // coverage days shown
 });
@@ -351,4 +353,36 @@ test("handleList hides pantry ingredients and shows an 'Уже дома' footer"
   expect(text).toContain("Уже дома");
   expect(text).toContain("рис");
   expect(text).toContain("мясо");
+});
+
+test("handleMenu shows an approximate per-dish cost", async () => {
+  const db = openDb(":memory:");
+  const id1 = insertDish(db, borsch);
+  const dishes = [{ ...borsch, id: id1 }];
+  saveSelection(db, "2026-W26", [id1]);
+  const matcher: Matcher = {
+    async searchTerms() { return []; },
+    async matchIngredient() {
+      return { externalId: 1, store: "aldi", storeName: "Aldi", product: "Rote Bete", price: 1.5, oldPrice: null, referencePrice: null, unit: "kg", validFrom: "", validTo: "" };
+    },
+  };
+  const text = await handleMenu({ db, dishes, matcher, week: "2026-W26", menuDays: 7 });
+  expect(text).toContain("1.50€");
+  expect(text.toLowerCase()).toContain("по акциям");
+});
+
+test("handleList shows a per-dish breakdown and grand total", async () => {
+  const db = openDb(":memory:");
+  const id1 = insertDish(db, borsch); // 1 ingredient
+  const dishes = [{ ...borsch, id: id1 }];
+  saveSelection(db, "2026-W26", [id1]);
+  const matcher: Matcher = {
+    async searchTerms() { return []; },
+    async matchIngredient() {
+      return { externalId: 1, store: "aldi", storeName: "Aldi", product: "Rote Bete", price: 2.0, oldPrice: null, referencePrice: null, unit: "kg", validFrom: "", validTo: "" };
+    },
+  };
+  const text = await handleList({ db, dishes, matcher, week: "2026-W26", plz: 30459 });
+  expect(text).toContain("Борщ — ~2.00€");
+  expect(text).toContain("Итого");
 });

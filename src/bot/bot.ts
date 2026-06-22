@@ -78,7 +78,9 @@ export function createBot(deps: {
     }).then((t) => reply(ctx, t));
 
   const menu = (ctx: Context) =>
-    reply(ctx, handleMenu({ db: deps.db, dishes, week: week(), menuDays: deps.menuDays, householdSize: household }));
+    handleMenu({ db: deps.db, dishes, matcher: deps.matcher, week: week(), menuDays: deps.menuDays, householdSize: household }).then(
+      (t) => reply(ctx, t)
+    );
 
   const list = (ctx: Context) =>
     handleList({ db: deps.db, dishes, matcher: deps.matcher, week: week(), plz: deps.plz, householdSize: household }).then(

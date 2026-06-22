@@ -3,6 +3,7 @@ import type { Matcher } from "../matcher";
 import { rankDishes } from "../recommender";
 import type { Database } from "bun:sqlite";
 import type { Llm } from "../llm/llm";
+import { estimateDishCost } from "../cost";
 import { resolveDishes } from "./resolve";
 import { planWeek } from "../planner";
 import { buildGroupedList } from "../shoppingList";
@@ -103,14 +104,15 @@ export async function handleSelect(
   return { text, unmatched };
 }
 
-/** Render the weekly menu from the saved selection. */
-export function handleMenu(deps: {
+/** Render the weekly menu from the saved selection, with an approximate per-dish cost. */
+export async function handleMenu(deps: {
   db: Database;
   dishes: Dish[];
+  matcher: Matcher;
   week: string;
   menuDays: number;
   householdSize?: number;
-}): string {
+}): Promise<string> {
   const ids = getSelection(deps.db, deps.week);
   if (!ids || ids.length === 0) return NO_SELECTION;
 
@@ -121,11 +123,14 @@ export function handleMenu(deps: {
   const seconds = chosen.filter((d) => d.course !== "first");
   const menu = planWeek(firsts, seconds, deps.menuDays);
 
+  const cost = new Map<number, number>();
+  for (const d of chosen) cost.set(d.id as number, await estimateDishCost(deps.matcher, d));
+
   const cell = (dish: Dish | null): string =>
-    dish ? `${dish.nameRu} (~${coverageDays(dish.servings, household)}дн)` : "—";
+    dish ? `${dish.nameRu} ~${(cost.get(dish.id as number) ?? 0).toFixed(2)}€ (~${coverageDays(dish.servings, household)}дн)` : "—";
 
   const labels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-  const lines = [`📅 Меню на неделю (семья ${household}):\n`];
+  const lines = [`📅 Меню на неделю (семья ${household}) · цены по акциям:\n`];
   for (const d of menu.days) {
     const label = labels[(d.day - 1) % 7] ?? `День ${d.day}`;
     lines.push(`*${label}*: 🥣 ${cell(d.first)} · 🍽 ${cell(d.second)}`);
@@ -162,6 +167,19 @@ export async function handleList(deps: {
     }
   }
   if (missing.length) lines.push(`\n*Докупить (не в акции):* ${missing.join(", ")}`);
+
+  const costLines = await Promise.all(
+    chosen.map(async (d) => `• ${d.nameRu} — ~${(await estimateDishCost(deps.matcher, d)).toFixed(2)}€`)
+  );
+  const total = (
+    await Promise.all(chosen.map((d) => estimateDishCost(deps.matcher, d)))
+  ).reduce((a, b) => a + b, 0);
+  if (costLines.length) {
+    lines.push(`\n💰 *Примерно по блюдам (по акциям):*`);
+    lines.push(...costLines);
+    lines.push(`Итого: ~${total.toFixed(2)}€`);
+  }
+
   if (inPantry.length) lines.push(`\n✅ Уже дома: ${inPantry.join(", ")}`);
   return lines.join("\n");
 }
