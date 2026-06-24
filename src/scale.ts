@@ -1,7 +1,7 @@
 import type { Ingredient } from "./types";
 
 /** Round a scaled quantity: integers at >= 10, one decimal below. */
-function roundQty(value: number): number {
+export function roundQty(value: number): number {
   return value >= 10 ? Math.round(value) : Math.round(value * 10) / 10;
 }
 
