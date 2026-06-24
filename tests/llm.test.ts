@@ -1,6 +1,7 @@
-import { test, expect } from "bun:test";
+import { test, expect, spyOn } from "bun:test";
 import { z } from "zod";
 import { createLlm, type LlmClient } from "../src/llm/llm";
+import { setLogLevel } from "../src/log";
 
 function clientReturning(inputs: unknown[]): LlmClient {
   let i = 0;
@@ -124,6 +125,28 @@ test("client is called with the configured model id", async () => {
   const llm = createLlm({ apiKey: "x", model: "claude-haiku-4-5", client });
   await llm.structured({ prompt: "x", toolName: "t", description: "d", schema: z.object({ terms: z.array(z.string()) }) });
   expect((calls[0] as { model: string }).model).toBe("claude-haiku-4-5");
+});
+
+test("structured logs token usage from the response", async () => {
+  setLogLevel("info");
+  const client: LlmClient = {
+    messages: {
+      create: async () =>
+        ({
+          content: [{ type: "tool_use", name: "t", input: { terms: ["x"] } }],
+          usage: { input_tokens: 120, output_tokens: 30, cache_read_input_tokens: 0 },
+        }) as unknown as { content: unknown[] },
+    },
+  };
+  const spy = spyOn(console, "log").mockImplementation(() => {});
+  const llm = createLlm({ apiKey: "x", model: "claude-haiku-4-5", client });
+  await llm.structured({ prompt: "x", toolName: "german_terms", description: "d", schema: z.object({ terms: z.array(z.string()) }) });
+  const line = spy.mock.calls.map((c) => String(c[0])).find((l) => l.includes("llm_usage"));
+  spy.mockRestore();
+  expect(line).toBeDefined();
+  expect(line).toContain('"input":120');
+  expect(line).toContain('"output":30');
+  expect(line).toContain("german_terms");
 });
 
 test("client is called with tool_choice forced to the tool name", async () => {

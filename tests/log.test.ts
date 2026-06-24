@@ -14,12 +14,18 @@ test("errInfo summarizes an Error to name + message only (no extra fields leak)"
   const e = new Error("rate limited");
   (e as unknown as { requestBody: string }).requestBody = "SECRET PROMPT with dish name";
   const info = errInfo(e);
-  expect(info).toEqual({ err: "Error", msg: "rate limited" });
+  expect(info).toEqual({ err: "Error", errMsg: "rate limited" });
   expect(JSON.stringify(info)).not.toContain("SECRET PROMPT");
 });
 
 test("errInfo handles non-Error values", () => {
-  expect(errInfo("boom")).toEqual({ err: "UnknownError", msg: "boom" });
+  expect(errInfo("boom")).toEqual({ err: "UnknownError", errMsg: "boom" });
+});
+
+test("errInfo fields do not clobber the log record's own msg (event name)", () => {
+  const rec = JSON.parse(formatLog("error", "bot_start_failed", errInfo(new Error("boom"))));
+  expect(rec.msg).toBe("bot_start_failed"); // event name survives
+  expect(rec.errMsg).toBe("boom"); // error text lives under its own key
 });
 
 test("log respects the minimum level", () => {

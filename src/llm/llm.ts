@@ -1,5 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { log } from "../log";
+
+type Usage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+};
 
 export interface Llm {
   structured<T>(args: {
@@ -40,6 +48,18 @@ export function createLlm(deps: { apiKey: string; model: string; client?: LlmCli
       tool_choice: { type: "tool", name: a.toolName },
       messages: [{ role: "user", content: a.prompt }],
     });
+    // Emit token usage so spend is measurable (and a cache breakpoint, once
+    // added, is verifiable via cacheRead > 0). Costs nothing if usage is absent.
+    const u = (res as { usage?: Usage }).usage;
+    if (u) {
+      log.info("llm_usage", {
+        tool: a.toolName,
+        input: u.input_tokens,
+        output: u.output_tokens,
+        cacheRead: u.cache_read_input_tokens,
+        cacheWrite: u.cache_creation_input_tokens,
+      });
+    }
     const block = (res.content as Array<{ type: string; input?: unknown }>).find(
       (b) => b.type === "tool_use"
     );
