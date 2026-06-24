@@ -41,3 +41,22 @@ test("planWeek leaves a slot null when that course has no dishes", () => {
   expect(menu.days.every((d) => d.first !== null)).toBe(true);
   expect(menu.days.every((d) => d.second === null)).toBe(true);
 });
+
+const withId = (d: Dish, id: number): Dish => ({ ...d, id });
+
+test("planWeek pins a dish to its day by course and keeps it off other days", () => {
+  const borsch = withId(dish("Борщ", 1, "first"), 1);
+  const rassolnik = withId(dish("Рассольник", 1, "first"), 2);
+  const plov = withId(dish("Плов", 1, "second"), 3);
+  const menu = planWeek([borsch, rassolnik], [plov], 3, [{ day: 2, dish: rassolnik }]);
+  expect(menu.days[1]!.first!.nameRu).toBe("Рассольник"); // pinned to day 2
+  expect(menu.days[0]!.first!.nameRu).toBe("Борщ");
+  expect(menu.days[2]!.first!.nameRu).toBe("Борщ"); // рассольник kept off auto-filled days
+  expect(menu.days[1]!.second!.nameRu).toBe("Плов"); // other course unaffected
+});
+
+test("planWeek ignores a pin whose day is outside the week", () => {
+  const borsch = withId(dish("Борщ", 1, "first"), 1);
+  const menu = planWeek([borsch], [], 3, [{ day: 9, dish: borsch }]);
+  expect(menu.days).toHaveLength(3);
+});

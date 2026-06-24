@@ -68,4 +68,9 @@ export const MIGRATIONS: string[] = [
      items_json TEXT NOT NULL,
      updated_at TEXT NOT NULL
    );`,
+  `CREATE TABLE IF NOT EXISTS day_pins (
+     week TEXT PRIMARY KEY,
+     pins_json TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );`,
 ];

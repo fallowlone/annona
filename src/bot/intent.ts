@@ -16,6 +16,8 @@ const INTENT_KINDS = [
   "remove_pantry",
   "show_pantry",
   "scale_dish",
+  "pin_dish",
+  "unpin_day",
   "show_menu",
   "show_list",
   "help",
@@ -25,6 +27,7 @@ const IntentSchema = z.object({
   kind: z.enum(INTENT_KINDS),
   dishNames: z.array(z.string()),
   targetServings: z.number().int().positive().optional(),
+  day: z.number().int().min(1).max(7).optional(),
 });
 
 /** Route a Russian/Ukrainian free-text message to a bot intent (LLM-backed). */
@@ -42,9 +45,11 @@ export async function classifyIntent(llm: Llm, text: string): Promise<Intent> {
       "- remove_pantry: items that ran out ('закончился рис').\n" +
       "- show_pantry: show what is at home.\n" +
       "- scale_dish: recompute one dish for N servings ('плов на 8 порций'); put the dish in dishNames[0] and N in targetServings.\n" +
+      "- pin_dish: pin a dish to a weekday ('в среду борщ'); dishNames[0]=dish, day=1..7 (Mon=1…Sun=7).\n" +
+      "- unpin_day: clear a pinned weekday ('открепи среду'); set day=1..7, dishNames=[].\n" +
       "- show_menu: show the weekly menu. show_list: show the shopping list.\n" +
       "- help: anything unclear or a greeting.\n" +
-      "Set targetServings ONLY for scale_dish.",
+      "Set targetServings ONLY for scale_dish; set day ONLY for pin_dish/unpin_day.",
     prompt: `Message: "${sanitizePromptText(text)}"`,
     toolName: "route_intent",
     description: "Classify the message intent",

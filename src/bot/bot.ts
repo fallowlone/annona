@@ -16,6 +16,8 @@ import {
   previewDeleteDish,
   confirmDeleteDish,
   handleScaleDish,
+  handlePinDish,
+  handleUnpinDay,
   helpText,
   handleAddPantry,
   handleRemovePantry,
@@ -257,6 +259,12 @@ export function createBot(deps: {
         break;
       case "scale_dish":
         await reply(ctx, await scaleDish(intent.dishNames[0] ?? "", intent.targetServings ?? household));
+        break;
+      case "pin_dish":
+        await reply(ctx, await handlePinDish({ llm: deps.llm, db: deps.db, dishes: catalogue(), week: week() }, intent.dishNames[0] ?? "", intent.day ?? 0));
+        break;
+      case "unpin_day":
+        await reply(ctx, handleUnpinDay({ db: deps.db, week: week() }, intent.day ?? 0));
         break;
       case "show_menu":
         await menu(ctx);
