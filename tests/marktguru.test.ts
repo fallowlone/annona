@@ -9,6 +9,11 @@ test("extractKeys reads apiKey/clientKey from the json script block", () => {
   expect(extractKeys(home)).toEqual({ apiKey: "AK_TEST", clientKey: "CK_TEST" });
 });
 
+test("extractKeys fails closed when the keys are present but not strings", () => {
+  const html = `<script type="application/json">${JSON.stringify({ config: { apiKey: null, clientKey: 123 } })}</script>`;
+  expect(() => extractKeys(html)).toThrow("could not extract");
+});
+
 test("parseOffers maps marktguru results to Offer", () => {
   const offers = parseOffers(search);
   expect(offers).toHaveLength(2);

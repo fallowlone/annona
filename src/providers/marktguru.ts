@@ -12,6 +12,8 @@ export interface OfferProvider {
   search(query: string): Promise<Offer[]>;
 }
 
+const KeysSchema = z.object({ apiKey: z.string().min(1), clientKey: z.string().min(1) });
+
 export function extractKeys(html: string): { apiKey: string; clientKey: string } {
   const re = /<script\s+type="application\/json">([\s\S]*?)<\/script>/gm;
   let m: RegExpExecArray | null;
@@ -21,17 +23,11 @@ export function extractKeys(html: string): { apiKey: string; clientKey: string }
       const cfg =
         (data as Record<string, unknown>)?.["config"] ??
         ((data as Record<string, unknown>)?.["marktguruConfig"] as Record<string, unknown> | undefined)?.["config"];
-      if (
-        cfg !== null &&
-        typeof cfg === "object" &&
-        "apiKey" in cfg &&
-        "clientKey" in cfg
-      ) {
-        return {
-          apiKey: String((cfg as Record<string, unknown>)["apiKey"]),
-          clientKey: String((cfg as Record<string, unknown>)["clientKey"]),
-        };
-      }
+      // Fail closed: only accept a block whose keys are real non-empty strings.
+      // A markup change that leaves the keys present-but-non-string previously
+      // minted garbage ("null", "[object Object]") that failed opaquely later.
+      const parsed = KeysSchema.safeParse(cfg);
+      if (parsed.success) return { apiKey: parsed.data.apiKey, clientKey: parsed.data.clientKey };
     } catch {
       // not the block we want
     }

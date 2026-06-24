@@ -53,6 +53,9 @@ export function createBot(deps: {
   digestLimit?: number;
 }): Bot {
   const bot = new Bot(deps.token);
+  // Net for errors thrown inside grammy middleware/menu handlers that aren't
+  // wrapped by guard() (e.g. the @grammyjs/menu card actions) — log, don't crash.
+  bot.catch((err) => log.error("bot_error", { userId: err.ctx?.from?.id, ...errInfo(err.error) }));
   const household = deps.householdSize ?? DEFAULT_HOUSEHOLD;
   let dishes = deps.dishes; // mutable: custom dishes append within the running process
 

@@ -56,6 +56,14 @@ const shutdown = async (sig: string): Promise<void> => {
 process.once("SIGINT", () => void shutdown("SIGINT"));
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
+// Last-resort nets for errors that escape the per-handler guard / bot.catch
+// (floating promises, errors outside the update cycle). Log, don't die silently.
+process.on("unhandledRejection", (reason) => log.error("unhandled_rejection", errInfo(reason)));
+process.on("uncaughtException", (e) => {
+  log.error("uncaught_exception", errInfo(e));
+  process.exit(1);
+});
+
 log.info("bot_starting");
 bot.start().catch((e) => {
   log.error("bot_start_failed", errInfo(e));

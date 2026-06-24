@@ -67,12 +67,24 @@ export function createLlm(deps: { apiKey: string; model: string; client?: LlmCli
     return a.schema.parse(block.input);
   }
 
+  // Worth a second identical attempt only when the model produced a malformed
+  // shape (schema violation or no tool_use block). A transport/API error was
+  // already retried by the SDK, so re-calling just doubles the spend.
+  const isModelShapeError = (e: unknown): boolean =>
+    e instanceof z.ZodError ||
+    (e instanceof Error && e.message.includes("no tool_use"));
+
   return {
     async structured(a) {
       try {
         return await once(a);
-      } catch {
-        return await once(a); // one retry on validation failure or missing tool_use
+      } catch (first) {
+        if (!isModelShapeError(first)) throw first;
+        try {
+          return await once(a);
+        } catch (second) {
+          throw new Error(`llm.structured failed after one retry: ${String(second)}`, { cause: first });
+        }
       }
     },
   };
