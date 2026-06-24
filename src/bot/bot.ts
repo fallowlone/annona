@@ -30,6 +30,7 @@ import { listDishes } from "../recipes/recipeStore";
 import { isoWeek } from "../util/week";
 import { log, errInfo } from "../log";
 import { createMenus } from "./menus";
+import { esc } from "./format";
 
 const DEFAULT_HOUSEHOLD = 2;
 
@@ -63,8 +64,11 @@ export function createBot(deps: {
     await next();
   });
 
+  // HTML parse mode throughout: handlers already esc() their dynamic strings.
+  // (Legacy Markdown can't be escaped reliably and silently 400s on an unbalanced
+  // metacharacter in a dish/product name.)
   const reply = async (ctx: Context, text: string) => {
-    await ctx.reply(text, { parse_mode: "Markdown" });
+    await ctx.reply(text, { parse_mode: "HTML" });
   };
 
   const week = () => isoWeek(new Date());
@@ -106,9 +110,9 @@ export function createBot(deps: {
 
   const genSummary = (st: GenState): string => {
     const parts: string[] = [];
-    if (st.added.length) parts.push(`✅ Добавил в неделю и каталог: ${st.added.join(", ")}.`);
-    if (st.skipped.length) parts.push(`Пропустил: ${st.skipped.join(", ")}.`);
-    if (st.failed.length) parts.push(`Не получилось сгенерировать: ${st.failed.join(", ")}.`);
+    if (st.added.length) parts.push(`✅ Добавил в неделю и каталог: ${esc(st.added.join(", "))}.`);
+    if (st.skipped.length) parts.push(`Пропустил: ${esc(st.skipped.join(", "))}.`);
+    if (st.failed.length) parts.push(`Не получилось сгенерировать: ${esc(st.failed.join(", "))}.`);
     if (parts.length === 0) parts.push("Готово.");
     return parts.join("\n") + "\n\n/menu — меню · /list — список покупок.";
   };
@@ -133,7 +137,7 @@ export function createBot(deps: {
       }
       pendingGen.set(uid, { ...st, dish: outcome.dish });
       await ctx.reply(outcome.text, {
-        parse_mode: "Markdown",
+        parse_mode: "HTML",
         reply_markup: new InlineKeyboard().text("✅ Сохранить", "gen_yes").text("❌ Пропустить", "gen_no"),
       });
       return;
@@ -144,7 +148,7 @@ export function createBot(deps: {
 
   const startGenQueue = async (ctx: Context, names: string[], wk: string): Promise<void> => {
     if (!ctx.from) return;
-    await reply(ctx, `Не нашёл в каталоге: ${names.join(", ")}. Сгенерировать рецепт?`);
+    await reply(ctx, `Не нашёл в каталоге: ${esc(names.join(", "))}. Сгенерировать рецепт?`);
     await offerNext(ctx, ctx.from.id, { queue: [...names], week: wk, added: [], skipped: [], failed: [] });
   };
 
@@ -169,7 +173,7 @@ export function createBot(deps: {
     }
     pendingDish.set(ctx.from.id, res.dish);
     await ctx.reply(res.text, {
-      parse_mode: "Markdown",
+      parse_mode: "HTML",
       reply_markup: new InlineKeyboard().text("✅ Сохранить", "dish_save").text("❌ Отмена", "dish_cancel"),
     });
   };
@@ -187,7 +191,7 @@ export function createBot(deps: {
     }
     pendingDelete.set(ctx.from.id, res.dishId);
     await ctx.reply(res.text, {
-      parse_mode: "Markdown",
+      parse_mode: "HTML",
       reply_markup: new InlineKeyboard().text("🗑 Удалить", "del_confirm").text("❌ Отмена", "del_cancel"),
     });
   };

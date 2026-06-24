@@ -17,13 +17,19 @@ export interface Fetcher {
 
 const RETRYABLE = new Set([403, 408, 429, 500, 502, 503, 504]);
 
+// A request that opens a TCP connection but never responds would otherwise
+// hang the await forever (never entering the retry loop). Bound every attempt.
+const DEFAULT_TIMEOUT_MS = 10_000;
+
 export function createFetcher(opts?: {
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   proxyMode?: "none" | "pool" | "service";
+  timeoutMs?: number;
 }): Fetcher {
   const doFetch = opts?.fetchImpl ?? fetch;
   const sleep = opts?.sleep ?? ((ms: number) => Bun.sleep(ms));
+  const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const mode = opts?.proxyMode ?? "none";
   if (mode !== "none") throw new Error(`proxy mode '${mode}' not configured yet`);
 
@@ -45,6 +51,9 @@ export function createFetcher(opts?: {
       try {
         const res = await doFetch(full, {
           headers: { "User-Agent": nextUa(), Accept: "application/json", ...(reqOpts?.headers ?? {}) },
+          // A timeout abort surfaces as an AbortError/TimeoutError, which (not
+          // being an "HTTP " error) falls through to the network-retry branch.
+          signal: AbortSignal.timeout(timeoutMs),
         });
         if (RETRYABLE.has(res.status)) {
           lastErr = new Error(`HTTP ${res.status}`);

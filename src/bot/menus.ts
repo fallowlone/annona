@@ -135,14 +135,14 @@ export function createMenus(deps: MenuDeps): { main: Menu<Context> } {
       await ctx.answerCallbackQuery();
       await ctx.reply(
         await handleMenu({ db: deps.db, dishes: listDishes(deps.db), matcher: deps.matcher, week: deps.week(), menuDays: deps.menuDays, householdSize: deps.householdSize }),
-        { parse_mode: "Markdown" }
+        { parse_mode: "HTML" }
       );
     })
     .text("🛒 Покупки", async (ctx) => {
       await ctx.answerCallbackQuery();
       await ctx.reply(
         await handleList({ db: deps.db, dishes: listDishes(deps.db), matcher: deps.matcher, week: deps.week(), plz: deps.plz, householdSize: deps.householdSize }),
-        { parse_mode: "Markdown" }
+        { parse_mode: "HTML" }
       );
     })
     .row()
@@ -150,12 +150,12 @@ export function createMenus(deps: MenuDeps): { main: Menu<Context> } {
       await ctx.answerCallbackQuery();
       await ctx.reply(
         await handleRecommend({ dishes: listDishes(deps.db), matcher: deps.matcher, coverageMin: deps.coverageMin, limit: deps.digestLimit, householdSize: deps.householdSize }),
-        { parse_mode: "Markdown" }
+        { parse_mode: "HTML" }
       );
     })
     .text("🥫 Кладовка", async (ctx) => {
       await ctx.answerCallbackQuery();
-      await ctx.reply(handleShowPantry({ db: deps.db, week: deps.week() }));
+      await ctx.reply(handleShowPantry({ db: deps.db, week: deps.week() }), { parse_mode: "HTML" });
     })
     .row()
     .submenu("📖 Рецепты", "annona-recipes");

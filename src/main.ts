@@ -1,7 +1,7 @@
 import { loadConfig } from "./config";
 import { openDb } from "./db/db";
 import { createFetcher } from "./net/fetcher";
-import { loadKeys, createMarktguruProvider } from "./providers/marktguru";
+import { createLazyMarktguruProvider } from "./providers/marktguru";
 import { createLlm } from "./llm/llm";
 import { createMatcher } from "./matcher";
 import { listDishes } from "./recipes/recipeStore";
@@ -13,8 +13,10 @@ import type { StoreKey } from "./stores";
 const cfg = loadConfig(Bun.env);
 const db = openDb("data/annona.db");
 const fetcher = createFetcher({ proxyMode: cfg.proxyMode });
-const keys = await loadKeys(fetcher);
-const provider = createMarktguruProvider({ fetcher, zipCode: cfg.locationPlz, keys });
+// Keys load lazily on first offer search, so marktguru being down or changing
+// its markup degrades matching to "nothing on offer" instead of crash-looping
+// the bot at boot. Menu/recipe/pantry reads work without it.
+const provider = createLazyMarktguruProvider({ fetcher, zipCode: cfg.locationPlz });
 const llm = createLlm({ apiKey: cfg.anthropicApiKey, model: cfg.llmModel });
 const whitelist = new Set<StoreKey>(cfg.storeWhitelist);
 const matcher = createMatcher({ db, llm, provider, week: () => isoWeek(new Date()), whitelist });

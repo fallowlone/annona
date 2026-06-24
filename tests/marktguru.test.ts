@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { extractKeys, parseOffers, createMarktguruProvider } from "../src/providers/marktguru";
+import { extractKeys, parseOffers, createMarktguruProvider, createLazyMarktguruProvider } from "../src/providers/marktguru";
 import type { Fetcher } from "../src/net/fetcher";
 
 const home = await Bun.file("fixtures/marktguru-home.html").text();
@@ -51,4 +51,47 @@ test("provider.search sends keys + zipCode and returns parsed offers", async () 
   expect(seen!.headers["x-apikey"]).toBe("AK");
   expect(seen!.query!.q).toBe("Schmand");
   expect(seen!.query!.zipCode).toBe(30459);
+});
+
+/** Fetcher whose getText (homepage for key extraction) is scripted per call. */
+function lazyFetcher(homeBodies: string[]): Fetcher {
+  let i = 0;
+  return {
+    async getText() {
+      return homeBodies[Math.min(i++, homeBodies.length - 1)] ?? "";
+    },
+    async getJson<T>() {
+      return search as T;
+    },
+  };
+}
+
+test("lazy provider loads keys on first search and returns offers", async () => {
+  const provider = createLazyMarktguruProvider({ fetcher: lazyFetcher([home]), zipCode: 30459 });
+  expect(await provider.search("Schmand")).toHaveLength(2);
+});
+
+test("lazy provider returns [] (does not throw) when key loading fails", async () => {
+  // homepage without the key block → extractKeys throws → degraded, no throw
+  const provider = createLazyMarktguruProvider({ fetcher: lazyFetcher([""]), zipCode: 30459 });
+  expect(await provider.search("Schmand")).toEqual([]);
+});
+
+test("lazy provider retries key load on a later call after an earlier failure", async () => {
+  const provider = createLazyMarktguruProvider({ fetcher: lazyFetcher(["", home]), zipCode: 30459 });
+  expect(await provider.search("Schmand")).toEqual([]); // first load fails
+  expect(await provider.search("Schmand")).toHaveLength(2); // second succeeds
+});
+
+test("lazy provider loads keys once under concurrent first searches (single-flight)", async () => {
+  let textCalls = 0;
+  const fetcher: Fetcher = {
+    async getText() { textCalls++; return home; },
+    async getJson<T>() { return search as T; },
+  };
+  const provider = createLazyMarktguruProvider({ fetcher, zipCode: 30459 });
+  const [a, b] = await Promise.all([provider.search("Schmand"), provider.search("Milch")]);
+  expect(a).toHaveLength(2);
+  expect(b).toHaveLength(2);
+  expect(textCalls).toBe(1); // one homepage scrape, not one per concurrent caller
 });
