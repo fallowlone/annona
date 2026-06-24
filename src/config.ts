@@ -29,6 +29,12 @@ const schema = z.object({
   DIGEST_LIMIT: z.coerce.number().int().positive().default(5),
   MENU_DAYS: z.coerce.number().int().positive().default(7),
   HOUSEHOLD_SIZE: z.coerce.number().int().positive().default(2),
+  // Weekly auto-push of the digest. Off by default — the bot only messages
+  // unprompted when explicitly opted in. (z.coerce.boolean treats "false" as
+  // truthy, so parse the flag by hand.)
+  DIGEST_PUSH: z.string().default("false").transform((s) => s.trim().toLowerCase() === "true"),
+  DIGEST_DOW: z.coerce.number().int().min(1).max(7).default(1),
+  DIGEST_HOUR: z.coerce.number().int().min(0).max(23).default(9),
 });
 
 export type ProxyMode = "none" | "pool" | "service";
@@ -46,6 +52,9 @@ export type Config = {
   digestLimit: number;
   menuDays: number;
   householdSize: number;
+  digestPush: boolean;
+  digestDow: number;
+  digestHour: number;
 };
 
 export function loadConfig(env: Record<string, string | undefined>): Config {
@@ -63,5 +72,8 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     digestLimit: p.DIGEST_LIMIT,
     menuDays: p.MENU_DAYS,
     householdSize: p.HOUSEHOLD_SIZE,
+    digestPush: p.DIGEST_PUSH,
+    digestDow: p.DIGEST_DOW,
+    digestHour: p.DIGEST_HOUR,
   };
 }
