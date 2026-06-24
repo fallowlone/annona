@@ -34,6 +34,22 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
+echo "-> Checking CI is green for $(git rev-parse --short HEAD)..."
+if command -v gh >/dev/null 2>&1; then
+  HEAD_SHA="$(git rev-parse HEAD)"
+  CI="$(gh run list --commit "${HEAD_SHA}" --limit 20 \
+        --json status,conclusion \
+        --jq 'map(select(.status=="completed")) | if length==0 then "pending" elif any(.conclusion!="success") then "failed" else "success" end' \
+        2>/dev/null || echo unknown)"
+  case "${CI}" in
+    failed)        echo "ERROR: CI is red for ${HEAD_SHA}. Fix before deploying." >&2; exit 1 ;;
+    pending|unknown) echo "   WARN: no completed CI run for ${HEAD_SHA} yet — continuing." >&2 ;;
+    success)       echo "   CI green." ;;
+  esac
+else
+  echo "   WARN: gh CLI not installed — skipping CI gate." >&2
+fi
+
 echo "-> Checking ${HOST} is reachable and has docker..."
 ssh "${HOST}" 'docker --version && docker compose version' >/dev/null
 
@@ -57,3 +73,6 @@ echo "  Reload dishes after seeding:"
 echo "    ssh ${HOST} 'cd ${DEST} && docker compose restart annona'"
 echo "  Tail logs:"
 echo "    ssh ${HOST} 'cd ${DEST} && docker compose logs -f'"
+echo "  Back up the SQLite DB (snapshot into the data volume; copy off-host with rsync):"
+echo "    ssh ${HOST} 'cd ${DEST} && docker compose run --rm annona bun run scripts/backup.ts'"
+echo "    # cron it, e.g.:  0 3 * * * cd ~/annona && docker compose run --rm annona bun run scripts/backup.ts"

@@ -22,10 +22,14 @@ export function formatLog(level: LogLevel, msg: string, fields?: Record<string, 
   return JSON.stringify({ ts: new Date().toISOString(), level, msg, ...fields });
 }
 
-/** Safe error summary — name + message only, never the full object/body. */
-export function errInfo(e: unknown): { err: string; msg: string } {
-  if (e instanceof Error) return { err: e.name, msg: e.message };
-  return { err: "UnknownError", msg: String(e) };
+/**
+ * Safe error summary — name + message only, never the full object/body.
+ * The message lives under `errMsg` (not `msg`) so spreading this into a log
+ * record never clobbers the record's own `msg` (the event name).
+ */
+export function errInfo(e: unknown): { err: string; errMsg: string } {
+  if (e instanceof Error) return { err: e.name, errMsg: e.message };
+  return { err: "UnknownError", errMsg: String(e) };
 }
 
 function emit(level: LogLevel, msg: string, fields?: Record<string, unknown>): void {

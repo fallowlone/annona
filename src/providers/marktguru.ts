@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Fetcher } from "../net/fetcher";
 import type { Offer } from "../types";
 import { cleanName } from "../normalize";
+import { log, errInfo } from "../log";
 
 const BASE = "https://api.marktguru.de/api/v1";
 const HOME = "https://www.marktguru.de/";
@@ -10,6 +11,8 @@ const DEFAULT_LIMIT = 80;
 export interface OfferProvider {
   search(query: string): Promise<Offer[]>;
 }
+
+const KeysSchema = z.object({ apiKey: z.string().min(1), clientKey: z.string().min(1) });
 
 export function extractKeys(html: string): { apiKey: string; clientKey: string } {
   const re = /<script\s+type="application\/json">([\s\S]*?)<\/script>/gm;
@@ -20,17 +23,11 @@ export function extractKeys(html: string): { apiKey: string; clientKey: string }
       const cfg =
         (data as Record<string, unknown>)?.["config"] ??
         ((data as Record<string, unknown>)?.["marktguruConfig"] as Record<string, unknown> | undefined)?.["config"];
-      if (
-        cfg !== null &&
-        typeof cfg === "object" &&
-        "apiKey" in cfg &&
-        "clientKey" in cfg
-      ) {
-        return {
-          apiKey: String((cfg as Record<string, unknown>)["apiKey"]),
-          clientKey: String((cfg as Record<string, unknown>)["clientKey"]),
-        };
-      }
+      // Fail closed: only accept a block whose keys are real non-empty strings.
+      // A markup change that leaves the keys present-but-non-string previously
+      // minted garbage ("null", "[object Object]") that failed opaquely later.
+      const parsed = KeysSchema.safeParse(cfg);
+      if (parsed.success) return { apiKey: parsed.data.apiKey, clientKey: parsed.data.clientKey };
     } catch {
       // not the block we want
     }
@@ -97,6 +94,58 @@ export function createMarktguruProvider(deps: {
         query: { as: "web", q: query, limit: DEFAULT_LIMIT, offset: 0, zipCode: deps.zipCode },
       });
       return parseOffers(json);
+    },
+  };
+}
+
+/**
+ * Provider that loads the marktguru api/client keys lazily on first search
+ * instead of at boot. A key-load failure (marktguru down / homepage markup
+ * changed) degrades to `[]` rather than crashing the process, and a failed
+ * search drops the cached keys so the next call re-extracts them — which also
+ * self-heals key rotation without a restart. Offer-less search is a graceful
+ * degrade: matching simply finds nothing on offer.
+ */
+export function createLazyMarktguruProvider(deps: {
+  fetcher: Fetcher;
+  zipCode: number;
+}): OfferProvider {
+  let inner: OfferProvider | null = null;
+  let pending: Promise<OfferProvider | null> | null = null;
+
+  // Single-flight the key load: concurrent first searches (e.g. handleList's
+  // parallel estimateDishCost) share one homepage scrape instead of stampeding
+  // marktguru with N identical requests (which would invite an anti-bot block).
+  function ensure(): Promise<OfferProvider | null> {
+    if (inner) return Promise.resolve(inner);
+    if (!pending) {
+      pending = (async () => {
+        try {
+          const keys = await loadKeys(deps.fetcher);
+          inner = createMarktguruProvider({ fetcher: deps.fetcher, zipCode: deps.zipCode, keys });
+          return inner;
+        } catch (e) {
+          log.warn("marktguru_keys_load_failed", errInfo(e));
+          return null; // degraded; retried on the next search
+        } finally {
+          pending = null; // allow a fresh attempt once this one settles
+        }
+      })();
+    }
+    return pending;
+  }
+
+  return {
+    async search(query: string): Promise<Offer[]> {
+      const p = await ensure();
+      if (!p) return [];
+      try {
+        return await p.search(query);
+      } catch (e) {
+        log.warn("marktguru_search_failed", errInfo(e));
+        inner = null; // keys may be stale/blocked — force a reload next call
+        return [];
+      }
     },
   };
 }

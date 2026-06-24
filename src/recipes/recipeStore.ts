@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { z } from "zod";
 import type { Dish, Ingredient } from "../types";
 import type { Llm } from "../llm/llm";
+import { sanitizePromptText } from "../util/prompt";
 
 // ── Schemas ────────────────────────────────────────────────────────────────
 
@@ -23,14 +24,12 @@ const DishSchema = z.object({
   ingredients: z.array(IngredientSchema).min(1),
 });
 
-// Zod infers nullable fields in the schema that don't structurally match the Dish interface, so we cast to bridge them.
-export const DishSeedSchema: z.ZodType<{ dishes: Dish[] }> = z.object({
-  dishes: z.array(DishSchema),
-}) as unknown as z.ZodType<{ dishes: Dish[] }>;
+// Inferred output (course is a required enum here, since the model always emits
+// it) is a structural subtype of Dish (course optional|null), so it's directly
+// assignable wherever a Dish is expected — no cast needed.
+export const DishSeedSchema = z.object({ dishes: z.array(DishSchema) });
 
-const GenerateDishSchema: z.ZodType<{ dish: Dish }> = z.object({
-  dish: DishSchema,
-}) as unknown as z.ZodType<{ dish: Dish }>;
+const GenerateDishSchema = z.object({ dish: DishSchema });
 
 const StepsSchema = z.object({ steps: z.string().min(1) });
 
@@ -162,8 +161,7 @@ export function saveDishSteps(db: Database, dishId: number, steps: string): void
 
 /** Generate numbered Russian cooking steps for a dish from its name + ingredients. */
 export async function generateSteps(llm: Llm, dish: Dish): Promise<string> {
-  // Neutralize guillemet/quote delimiter-breakout and cap length before interpolating into the prompt.
-  const safeName = dish.nameRu.replace(/[«»"]/g, "'").slice(0, 120);
+  const safeName = sanitizePromptText(dish.nameRu, 120);
   const ings = dish.ingredients
     .map((i) => (i.qty !== null ? `${i.canonical} ${i.qty}${i.unit ? ` ${i.unit}` : ""}` : i.canonical))
     .join(", ");
@@ -194,12 +192,18 @@ export async function seedDishes(db: Database, llm: Llm, target: number): Promis
   const need = Math.max(0, target - seen.size);
 
   const BATCH = 8;
+  // Only the most recent names go into the anti-repeat hint. Sending the full
+  // `seen` set grew the prompt O(n) per batch → O(n²) input tokens over a run;
+  // a bounded window keeps each prompt O(1) while still steering away from the
+  // last couple of batches (the post-hoc `seen.has` check dedupes the rest).
+  const EXCLUDE_WINDOW = 16;
   let added = 0;
   while (added < need) {
     const want = Math.min(BATCH, need - added);
+    const recent = [...seen].slice(-EXCLUDE_WINDOW);
     const exclude =
-      seen.size > 0
-        ? ` Do NOT repeat any of these already-known dishes: ${[...seen].join(", ")}.`
+      recent.length > 0
+        ? ` Do NOT repeat any of these already-known dishes: ${recent.join(", ")}.`
         : "";
     const out = await llm.structured({
       system:
@@ -269,8 +273,7 @@ export async function seedClassics(db: Database, llm: Llm): Promise<number> {
  * conventions as `seedDishes`). Returns a validated Dish; the caller persists it.
  */
 export async function generateDish(llm: Llm, name: string): Promise<Dish> {
-  // Neutralize quote-breakout and cap length before interpolating user text into the prompt.
-  const safeName = name.replace(/"/g, "'").slice(0, 120);
+  const safeName = sanitizePromptText(name, 120);
   const out = await llm.structured({
     system:
       "You are a chef cataloguing home dishes a CIS family can cook in Germany: mostly Ukrainian and Russian classics, plus globally popular dishes.",

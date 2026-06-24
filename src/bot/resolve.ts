@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Llm } from "../llm/llm";
 import type { Dish } from "../types";
+import { sanitizePromptText } from "../util/prompt";
 
 const ResolveSchema = z.object({
   matchedIds: z.array(z.number().int()),
@@ -26,7 +27,7 @@ export async function resolveDishes(
     system:
       "Match each user dish name to the closest dish id from the catalogue (handle RU/UA spelling " +
       "and synonyms). Put any user name with no good catalogue match into 'unmatched'.",
-    prompt: `Catalogue (id: name (course)):\n${list}\n\nUser dishes: ${names.join(", ")}`,
+    prompt: `Catalogue (id: name (course)):\n${list}\n\nUser dishes: ${names.map((n) => sanitizePromptText(n, 120)).join(", ")}`,
     toolName: "resolve_dishes",
     description: "Resolve user dish names to catalogue ids",
     schema: ResolveSchema,

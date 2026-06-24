@@ -107,6 +107,45 @@ test("handleRecommend returns a threshold-aware fallback when nothing qualifies"
   expect(text).not.toEqual("");
 });
 
+test("handleRecommend HTML-escapes dish names so model output can't break formatting", async () => {
+  const offers: Record<string, Offer> = {
+    "рис": { externalId: 1, store: "aldi", storeName: "Aldi", product: "Reis",
+      price: 0.99, oldPrice: null, referencePrice: 0.99, unit: "kg", validFrom: "", validTo: "" },
+  };
+  const matcher: Matcher = {
+    async searchTerms() { return []; },
+    async matchIngredient(c) { return offers[c] ?? null; },
+  };
+  const dishes: Dish[] = [{
+    nameRu: 'Café <b>X</b> & Co', nameUa: null, nameDe: null, cuisine: "ru",
+    course: "second", keepsDays: 1, tags: [], servings: 2,
+    ingredients: [{ canonical: "рис", qty: 1, unit: "кг" }],
+  }];
+  const text = await handleRecommend({ dishes, matcher });
+  expect(text).toContain("Café &lt;b&gt;X&lt;/b&gt; &amp; Co"); // escaped
+  expect(text).not.toContain("Café <b>X</b>"); // raw injection neutralized
+});
+
+test("handleList HTML-escapes scraped product names", async () => {
+  const db = openDb(":memory:");
+  const dish: Dish = {
+    nameRu: "Тест", nameUa: null, nameDe: null, cuisine: "ru", course: "second",
+    keepsDays: 1, tags: [], servings: 2, ingredients: [{ canonical: "картофель", qty: 1, unit: "кг" }],
+  };
+  const id = insertDish(db, dish);
+  saveSelection(db, "2026-W26", [id]);
+  const matcher: Matcher = {
+    async searchTerms() { return []; },
+    async matchIngredient() {
+      return { externalId: 1, store: "aldi", storeName: "Aldi", product: 'Kartoffeln <b>&"x"',
+        price: 1.99, oldPrice: null, referencePrice: null, unit: "kg", validFrom: "", validTo: "" };
+    },
+  };
+  const text = await handleList({ db, dishes: listDishes(db), matcher, week: "2026-W26", plz: 30459 });
+  expect(text).toContain("Kartoffeln &lt;b&gt;&amp;&quot;x&quot;"); // scraped product escaped (incl. quote)
+  expect(text).not.toContain("Kartoffeln <b>"); // raw injection neutralized
+});
+
 const borsch: Dish = { nameRu: "Борщ", nameUa: null, nameDe: null, cuisine: "ua", course: "first", keepsDays: 4, tags: [], servings: 4, ingredients: [{ canonical: "свёкла", qty: 1, unit: "кг" }] };
 const plov: Dish = { nameRu: "Плов", nameUa: null, nameDe: null, cuisine: "ru", course: "second", keepsDays: 3, tags: [], servings: 4, ingredients: [{ canonical: "рис", qty: 1, unit: "кг" }] };
 

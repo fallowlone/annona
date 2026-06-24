@@ -172,6 +172,25 @@ test("insertDish defaults missing metadata to null course and keepsDays 1", () =
   expect(all[0]!.keepsDays).toBe(1);
 });
 
+test("seedDishes bounds the exclude list so a seed run's prompt stays O(1) per batch", async () => {
+  const db = openDb(":memory:");
+  const prompts: string[] = [];
+  let batch = 0;
+  const fakeLlm: Llm = {
+    async structured<T>(a: { prompt: string }): Promise<T> {
+      prompts.push(a.prompt);
+      const b = batch++;
+      const dishes = Array.from({ length: 8 }, (_, i) => ({ ...borscht, nameRu: `Блюдо ${b}_${i}` }));
+      return { dishes } as unknown as T;
+    },
+  };
+  await seedDishes(db, fakeLlm, 40); // ~5 batches of 8
+  const last = prompts[prompts.length - 1]!;
+  // The earliest-seeded dishes must have aged out of the recent-window exclude
+  // (full O(n²) exclude would still carry every prior name into the last prompt).
+  expect(last).not.toContain("Блюдо 0_0");
+});
+
 test("seedDishes is idempotent: a second run with the target already met adds nothing", async () => {
   const db = openDb(":memory:");
   const fakeLlm: Llm = {

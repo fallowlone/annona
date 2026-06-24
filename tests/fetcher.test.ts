@@ -47,6 +47,13 @@ test("does not retry on non-retryable status (404)", async () => {
   expect(calls.length).toBe(1);
 });
 
+test("does not retry on 403 (anti-bot block — retrying escalates it)", async () => {
+  const { impl, calls } = fakeFetch([{ status: 403, body: "" }]);
+  const f = createFetcher({ fetchImpl: impl, sleep: async () => {} });
+  await expect(f.getJson("https://x.test/a", { retries: 3 })).rejects.toThrow("HTTP 403");
+  expect(calls.length).toBe(1);
+});
+
 test("retries network-level throws (ECONNREFUSED) then succeeds", async () => {
   let callCount = 0;
   const calls: string[] = [];
@@ -94,6 +101,38 @@ test("backoff delays increase exponentially", async () => {
   // second delay should be larger than first
   expect(delays[1]!).toBeGreaterThan(delays[0]!);
 });
+
+test("passes a timeout AbortSignal to the underlying fetch", async () => {
+  let sawSignal = false;
+  const impl = (async (_url: string, init?: RequestInit) => {
+    sawSignal = init?.signal instanceof AbortSignal;
+    return new Response("{}", { status: 200 });
+  }) as unknown as typeof fetch;
+  const f = createFetcher({ fetchImpl: impl, sleep: async () => {} });
+  await f.getJson("https://x.test/a");
+  expect(sawSignal).toBe(true);
+});
+
+test("times out a hung request and retries instead of hanging forever", async () => {
+  let n = 0;
+  const impl = (async (_url: string, init?: RequestInit) => {
+    n++;
+    const signal = init?.signal as AbortSignal | undefined;
+    if (n === 1) {
+      // First request hangs; only the timeout abort can settle it.
+      return await new Promise<Response>((_res, rej) => {
+        signal?.addEventListener("abort", () =>
+          rej(signal.reason ?? new DOMException("aborted", "AbortError"))
+        );
+      });
+    }
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  }) as unknown as typeof fetch;
+  const f = createFetcher({ fetchImpl: impl, sleep: async () => {}, timeoutMs: 20 });
+  const out = await f.getJson<{ ok: boolean }>("https://x.test/a");
+  expect(out.ok).toBe(true);
+  expect(n).toBe(2);
+}, 2000);
 
 test("User-Agent is set on every request including retries", async () => {
   const { impl, calls } = fakeFetch([

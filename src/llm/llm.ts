@@ -1,5 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { log } from "../log";
+
+type Usage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+};
 
 export interface Llm {
   structured<T>(args: {
@@ -40,6 +48,18 @@ export function createLlm(deps: { apiKey: string; model: string; client?: LlmCli
       tool_choice: { type: "tool", name: a.toolName },
       messages: [{ role: "user", content: a.prompt }],
     });
+    // Emit token usage so spend is measurable (and a cache breakpoint, once
+    // added, is verifiable via cacheRead > 0). Costs nothing if usage is absent.
+    const u = (res as { usage?: Usage }).usage;
+    if (u) {
+      log.info("llm_usage", {
+        tool: a.toolName,
+        input: u.input_tokens,
+        output: u.output_tokens,
+        cacheRead: u.cache_read_input_tokens,
+        cacheWrite: u.cache_creation_input_tokens,
+      });
+    }
     const block = (res.content as Array<{ type: string; input?: unknown }>).find(
       (b) => b.type === "tool_use"
     );
@@ -47,12 +67,24 @@ export function createLlm(deps: { apiKey: string; model: string; client?: LlmCli
     return a.schema.parse(block.input);
   }
 
+  // Worth a second identical attempt only when the model produced a malformed
+  // shape (schema violation or no tool_use block). A transport/API error was
+  // already retried by the SDK, so re-calling just doubles the spend.
+  const isModelShapeError = (e: unknown): boolean =>
+    e instanceof z.ZodError ||
+    (e instanceof Error && e.message.includes("no tool_use"));
+
   return {
     async structured(a) {
       try {
         return await once(a);
-      } catch {
-        return await once(a); // one retry on validation failure or missing tool_use
+      } catch (first) {
+        if (!isModelShapeError(first)) throw first;
+        try {
+          return await once(a);
+        } catch (second) {
+          throw new Error(`llm.structured failed after one retry: ${String(second)}`, { cause: first });
+        }
       }
     },
   };

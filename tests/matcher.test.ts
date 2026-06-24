@@ -50,6 +50,18 @@ test("matchIngredient returns the cheapest offer across all terms and cache-hit 
   expect(cached!.storeName).toBe("Kaufland");
 });
 
+test("matchIngredient stores an ISO timestamp in match_cache.created_at (not the week)", async () => {
+  const db = openDb(":memory:");
+  const provider: OfferProvider = { async search() { return [offer({})]; } };
+  const m = createMatcher({ db, llm: llmStub(["Schmand"]), provider, week: () => "2026-W26" });
+  await m.matchIngredient("сметана");
+  const row = db
+    .query("SELECT created_at FROM match_cache WHERE ingredient_canonical = ?")
+    .get("сметана") as { created_at: string };
+  expect(row.created_at).not.toBe("2026-W26"); // must be a timestamp, not the week label
+  expect(row.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T/); // ISO 8601
+});
+
 test("searchTerms cache-MISS calls LLM and persists terms to synonyms table", async () => {
   const db = openDb(":memory:");
   let called = false;
