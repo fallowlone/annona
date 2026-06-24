@@ -26,10 +26,13 @@ const llmDish = (d: Dish): Llm => ({ async structured() { return { dish: d } as 
 
 type Sent = { method: string; payload: Record<string, unknown> };
 
-function harness(db: ReturnType<typeof openDb>, dishes: Dish[], llm: Llm, matcher: Matcher = noMatcher) {
+// `seed` documents the catalogue each test inserts into `db`; the bot now reads
+// the catalogue live from `db`, so it is not forwarded to createBot.
+function harness(db: ReturnType<typeof openDb>, seed: Dish[], llm: Llm, matcher: Matcher = noMatcher) {
+  void seed;
   const sent: Sent[] = [];
   const bot = createBot({
-    token: "TEST", allowedUserIds: [USER], dishes, matcher, llm, db,
+    token: "TEST", allowedUserIds: [USER], matcher, llm, db,
     plz: 30459, menuDays: 7, householdSize: 2,
   });
   // Avoid the getMe network call.

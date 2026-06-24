@@ -42,7 +42,6 @@ function parseNames(arg: string): string[] {
 export function createBot(deps: {
   token: string;
   allowedUserIds: number[];
-  dishes: Dish[];
   matcher: Matcher;
   llm: Llm;
   db: Database;
@@ -57,7 +56,10 @@ export function createBot(deps: {
   // wrapped by guard() (e.g. the @grammyjs/menu card actions) — log, don't crash.
   bot.catch((err) => log.error("bot_error", { userId: err.ctx?.from?.id, ...errInfo(err.error) }));
   const household = deps.householdSize ?? DEFAULT_HOUSEHOLD;
-  let dishes = deps.dishes; // mutable: custom dishes append within the running process
+  // Single source of truth: read the catalogue live from the DB on every use
+  // (like the menu handlers do). A mutable cached copy went stale whenever a
+  // catalogue mutation happened on the menu side, which createBot couldn't see.
+  const catalogue = (): Dish[] => listDishes(deps.db);
 
   bot.use(async (ctx, next) => {
     if (!isAllowed(ctx.from?.id, deps.allowedUserIds)) {
@@ -85,7 +87,7 @@ export function createBot(deps: {
 
   const suggest = (ctx: Context) =>
     handleRecommend({
-      dishes,
+      dishes: catalogue(),
       matcher: deps.matcher,
       coverageMin: deps.coverageMin,
       limit: deps.digestLimit,
@@ -93,20 +95,20 @@ export function createBot(deps: {
     }).then((t) => reply(ctx, t));
 
   const menu = (ctx: Context) =>
-    handleMenu({ db: deps.db, dishes, matcher: deps.matcher, week: week(), menuDays: deps.menuDays, householdSize: household }).then(
+    handleMenu({ db: deps.db, dishes: catalogue(), matcher: deps.matcher, week: week(), menuDays: deps.menuDays, householdSize: household }).then(
       (t) => reply(ctx, t)
     );
 
   const list = (ctx: Context) =>
-    handleList({ db: deps.db, dishes, matcher: deps.matcher, week: week(), plz: deps.plz, householdSize: household }).then(
+    handleList({ db: deps.db, dishes: catalogue(), matcher: deps.matcher, week: week(), plz: deps.plz, householdSize: household }).then(
       (t) => reply(ctx, t)
     );
 
   const addDishes = (names: string[]) =>
-    handleAddDishes({ llm: deps.llm, db: deps.db, dishes, week: week() }, names);
+    handleAddDishes({ llm: deps.llm, db: deps.db, dishes: catalogue(), week: week() }, names);
 
   const removeDishes = (names: string[]) =>
-    handleRemoveDishes({ llm: deps.llm, db: deps.db, dishes, week: week() }, names);
+    handleRemoveDishes({ llm: deps.llm, db: deps.db, dishes: catalogue(), week: week() }, names);
 
   type GenState = { queue: string[]; week: string; added: string[]; skipped: string[]; failed: string[] };
   const pendingGen = new Map<number, GenState & { dish: Dish }>(); // userId → current preview + remaining queue
@@ -134,7 +136,6 @@ export function createBot(deps: {
         continue;
       }
       if (outcome.status === "added") {
-        dishes = listDishes(deps.db);
         st.added.push(outcome.nameRu);
         continue;
       }
@@ -187,7 +188,7 @@ export function createBot(deps: {
       await reply(ctx, "Напиши название: «удали блюдо борщ».");
       return;
     }
-    const res = await previewDeleteDish({ llm: deps.llm, db: deps.db, dishes }, clean);
+    const res = await previewDeleteDish({ llm: deps.llm, db: deps.db, dishes: catalogue() }, clean);
     if (res.status !== "confirm" || !ctx.from) {
       await reply(ctx, res.text);
       return;
@@ -200,7 +201,7 @@ export function createBot(deps: {
   };
 
   const scaleDish = (name: string, target: number) =>
-    handleScaleDish({ llm: deps.llm, db: deps.db, dishes }, name, target);
+    handleScaleDish({ llm: deps.llm, db: deps.db, dishes: catalogue() }, name, target);
 
   const matchText = (ctx: Context): string => (typeof ctx.match === "string" ? ctx.match : "");
 
@@ -236,7 +237,7 @@ export function createBot(deps: {
     const intent = routeMessage(text) ?? (await classifyIntent(deps.llm, text));
     switch (intent.kind) {
       case "select_dishes":
-        await replyNamesResult(ctx, await handleSelect({ llm: deps.llm, db: deps.db, dishes, week: week() }, intent.dishNames), week());
+        await replyNamesResult(ctx, await handleSelect({ llm: deps.llm, db: deps.db, dishes: catalogue(), week: week() }, intent.dishNames), week());
         break;
       case "add_dishes":
         await replyNamesResult(ctx, await addDishes(intent.dishNames), week());
@@ -286,7 +287,6 @@ export function createBot(deps: {
     }
     pendingGen.delete(uid);
     saveDishToWeek({ db: deps.db }, st.dish, st.week);
-    dishes = listDishes(deps.db); // refresh catalogue so the new dish is selectable now
     st.added.push(st.dish.nameRu);
     await offerNext(ctx, uid, { queue: st.queue, week: st.week, added: st.added, skipped: st.skipped, failed: st.failed });
   }));
@@ -314,7 +314,6 @@ export function createBot(deps: {
     }
     pendingDish.delete(uid);
     const msg = confirmCustomDish({ db: deps.db }, dish);
-    dishes = listDishes(deps.db); // refresh catalogue so the new dish is selectable now
     await reply(ctx, msg);
   }));
 
@@ -334,7 +333,6 @@ export function createBot(deps: {
     }
     pendingDelete.delete(uid);
     const msg = confirmDeleteDish({ db: deps.db }, dishId);
-    dishes = listDishes(deps.db); // refresh catalogue after removal
     await reply(ctx, msg);
   }));
 

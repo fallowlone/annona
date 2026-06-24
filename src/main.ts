@@ -27,7 +27,6 @@ if (dishes.length === 0) log.warn("no_dishes_seeded", { hint: "run `bun run seed
 const bot = createBot({
   token: cfg.telegramBotToken,
   allowedUserIds: cfg.allowedUserIds,
-  dishes,
   matcher,
   llm,
   db,
