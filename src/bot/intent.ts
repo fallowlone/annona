@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Llm } from "../llm/llm";
 import type { Intent, IntentKind } from "../types";
+import { sanitizePromptText } from "../util/prompt";
 
 // Kept in lockstep with IntentKind via `satisfies` so the classifier schema and
 // the bot.ts dispatch switch can never silently drift apart.
@@ -44,7 +45,7 @@ export async function classifyIntent(llm: Llm, text: string): Promise<Intent> {
       "- show_menu: show the weekly menu. show_list: show the shopping list.\n" +
       "- help: anything unclear or a greeting.\n" +
       "Set targetServings ONLY for scale_dish.",
-    prompt: `Message: "${text}"`,
+    prompt: `Message: "${sanitizePromptText(text)}"`,
     toolName: "route_intent",
     description: "Classify the message intent",
     schema: IntentSchema,

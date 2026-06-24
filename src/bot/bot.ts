@@ -25,7 +25,7 @@ import {
   type SelectResult,
 } from "./handlers";
 import { classifyIntent } from "./intent";
-import { routeMessage } from "./router";
+import { routeMessage, names as splitNames } from "./router";
 import { listDishes } from "../recipes/recipeStore";
 import { isoWeek } from "../util/week";
 import { log, errInfo } from "../log";
@@ -33,11 +33,6 @@ import { createMenus } from "./menus";
 import { esc } from "./format";
 
 const DEFAULT_HOUSEHOLD = 2;
-
-/** Split a free-text argument like "борщ, плов" into trimmed dish names. */
-function parseNames(arg: string): string[] {
-  return arg.split(",").map((s) => s.trim()).filter(Boolean);
-}
 
 export function createBot(deps: {
   token: string;
@@ -220,14 +215,14 @@ export function createBot(deps: {
   bot.command("digest", guard(suggest));
   bot.command("menu", guard(menu));
   bot.command("list", guard(list));
-  bot.command("add", guard(async (ctx) => replyNamesResult(ctx, await addDishes(parseNames(matchText(ctx))), week())));
-  bot.command("remove", guard(async (ctx) => reply(ctx, await removeDishes(parseNames(matchText(ctx))))));
+  bot.command("add", guard(async (ctx) => replyNamesResult(ctx, await addDishes(splitNames(matchText(ctx))), week())));
+  bot.command("remove", guard(async (ctx) => reply(ctx, await removeDishes(splitNames(matchText(ctx))))));
   bot.command("recipe", guard((ctx) => startCustomDish(ctx, matchText(ctx))));
   bot.command("delrecipe", guard((ctx) => startDeleteDish(ctx, matchText(ctx))));
   bot.command("pantry", guard((ctx) => {
     const arg = matchText(ctx);
     const msg = arg.trim()
-      ? handleAddPantry({ db: deps.db, week: week() }, arg.split(",").map((s) => s.trim()).filter(Boolean))
+      ? handleAddPantry({ db: deps.db, week: week() }, splitNames(arg))
       : handleShowPantry({ db: deps.db, week: week() });
     return reply(ctx, msg);
   }));

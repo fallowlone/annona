@@ -4,8 +4,9 @@ import type { Intent } from "../types";
 const MAX_SERVINGS = 100;
 const MAX_DISH_NAME_LEN = 120;
 
-/** Split a remainder into trimmed, non-empty, length-capped dish names. */
-function names(rest: string): string[] {
+/** Split a comma list into trimmed, non-empty, length-capped names. Canonical
+ *  splitter shared with the command handlers so caps/rules can't drift. */
+export function names(rest: string): string[] {
   return rest
     .split(",")
     .map((s) => s.trim())

@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { z } from "zod";
 import type { Dish, Ingredient } from "../types";
 import type { Llm } from "../llm/llm";
+import { sanitizePromptText } from "../util/prompt";
 
 // ── Schemas ────────────────────────────────────────────────────────────────
 
@@ -160,8 +161,7 @@ export function saveDishSteps(db: Database, dishId: number, steps: string): void
 
 /** Generate numbered Russian cooking steps for a dish from its name + ingredients. */
 export async function generateSteps(llm: Llm, dish: Dish): Promise<string> {
-  // Neutralize guillemet/quote delimiter-breakout and cap length before interpolating into the prompt.
-  const safeName = dish.nameRu.replace(/[«»"]/g, "'").slice(0, 120);
+  const safeName = sanitizePromptText(dish.nameRu, 120);
   const ings = dish.ingredients
     .map((i) => (i.qty !== null ? `${i.canonical} ${i.qty}${i.unit ? ` ${i.unit}` : ""}` : i.canonical))
     .join(", ");
@@ -273,8 +273,7 @@ export async function seedClassics(db: Database, llm: Llm): Promise<number> {
  * conventions as `seedDishes`). Returns a validated Dish; the caller persists it.
  */
 export async function generateDish(llm: Llm, name: string): Promise<Dish> {
-  // Neutralize quote-breakout and cap length before interpolating user text into the prompt.
-  const safeName = name.replace(/"/g, "'").slice(0, 120);
+  const safeName = sanitizePromptText(name, 120);
   const out = await llm.structured({
     system:
       "You are a chef cataloguing home dishes a CIS family can cook in Germany: mostly Ukrainian and Russian classics, plus globally popular dishes.",
