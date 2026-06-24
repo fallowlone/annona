@@ -10,6 +10,7 @@ import type { Matcher } from "../src/matcher";
 import { openDb } from "../src/db/db";
 import { insertDish, listDishes } from "../src/recipes/recipeStore";
 import { saveSelection, getSelection } from "../src/recipes/selectionStore";
+import { getPins } from "../src/recipes/pinsStore";
 import type { Llm } from "../src/llm/llm";
 
 const llmResolve = (matchedIds: number[], unmatched: string[] = []): Llm => ({
@@ -189,6 +190,18 @@ test("handlePinDish pins a dish to a day; handleMenu shows it there with 📌", 
   const tue = menu.split("\n").find((l) => l.includes("Вт"));
   expect(tue).toContain("📌");
   expect(tue).toContain("Борщ"); // pinned dish lands on Tuesday's first-course slot
+});
+
+test("handlePinDish prunes pins for dishes no longer in the catalogue", async () => {
+  const db = openDb(":memory:");
+  const idA = insertDish(db, borsch);
+  const idB = insertDish(db, plov);
+  await handlePinDish({ llm: llmResolve([idA]), db, dishes: [{ ...borsch, id: idA }, { ...plov, id: idB }], week: "2026-W26" }, "борщ", 2);
+  // борщ is now "gone" from the catalogue passed in; pinning плов must drop the stale pin.
+  await handlePinDish({ llm: llmResolve([idB]), db, dishes: [{ ...plov, id: idB }], week: "2026-W26" }, "плов", 3);
+  const ids = getPins(db, "2026-W26").map((p) => p.dishId);
+  expect(ids).not.toContain(idA); // stale pin pruned
+  expect(ids).toContain(idB);
 });
 
 test("handleUnpinDay clears a day's pin", async () => {

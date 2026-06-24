@@ -343,9 +343,11 @@ export async function handlePinDish(
   const dish = matched[0];
   if (!dish || dish.id === undefined) return `Не нашёл блюдо «${esc(name)}».`;
   const byId = new Map(deps.dishes.filter((d) => d.id !== undefined).map((d) => [d.id as number, d]));
-  const pins = getPins(deps.db, deps.week).filter(
-    (p) => !(p.day === day && byId.get(p.dishId)?.course === dish.course)
-  );
+  const pins = getPins(deps.db, deps.week).filter((p) => {
+    const existing = byId.get(p.dishId);
+    if (!existing) return false; // prune pins whose dish was removed from the catalogue
+    return !(p.day === day && existing.course === dish.course); // replace same day+course
+  });
   pins.push({ day, dishId: dish.id });
   savePins(deps.db, deps.week, pins);
   addToSelection(deps.db, deps.week, [dish.id]);
