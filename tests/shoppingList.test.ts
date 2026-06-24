@@ -79,6 +79,24 @@ test("buildGroupedList keeps mismatched units as separate lines", async () => {
   expect(milk.map((i) => `${i.qty}${i.unit}`).sort()).toEqual(["1шт", "200мл"]);
 });
 
+test("buildGroupedList merges compatible mass units (кг + г) into one line", async () => {
+  const d1 = dishOf(4, [{ canonical: "мука", qty: 0.5, unit: "кг" }]);
+  const d2 = dishOf(4, [{ canonical: "мука", qty: 300, unit: "г" }]);
+  const list = await buildGroupedList([d1, d2], oneOffer, 30459, 4);
+  const flour = list.groups[0]!.items.filter((i) => i.ingredient === "мука");
+  expect(flour).toHaveLength(1);
+  expect(flour[0]).toMatchObject({ qty: 800, unit: "г" }); // 500г + 300г
+});
+
+test("buildGroupedList merges л + мл and presents ≥1000мл as л", async () => {
+  const d1 = dishOf(4, [{ canonical: "молоко", qty: 0.8, unit: "л" }]);
+  const d2 = dishOf(4, [{ canonical: "молоко", qty: 400, unit: "мл" }]);
+  const list = await buildGroupedList([d1, d2], oneOffer, 30459, 4);
+  const milk = list.groups[0]!.items.filter((i) => i.ingredient === "молоко");
+  expect(milk).toHaveLength(1);
+  expect(milk[0]).toMatchObject({ qty: 1.2, unit: "л" }); // 800мл + 400мл
+});
+
 test("buildGroupedList scales quantities to targetServings", async () => {
   const d1 = dishOf(4, [{ canonical: "рис", qty: 100, unit: "г" }]);
   const list = await buildGroupedList([d1], oneOffer, 30459, 8); // 4 → 8 doubles

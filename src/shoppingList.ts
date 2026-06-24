@@ -2,9 +2,13 @@ import type { Dish, GroupedShoppingList, StoreGroup } from "./types";
 import type { Matcher } from "./matcher";
 import { canonicalStore, mapsLink, type StoreKey } from "./stores";
 import { scaleIngredients } from "./scale";
+import { unitInfo, displayBaseQty, type Dim } from "./units";
 import { normalizePantryItem } from "./recipes/pantryStore";
 
-type Bucket = { unit: string | null; qty: number | null };
+// For a convertible unit, `qty` accumulates in base units (g/ml) under a shared
+// `dim` so e.g. "0.5 кг" + "300 г" merge; for a count/opaque unit, `dim` is null
+// and `qty` sums only the same raw `unit`.
+type Bucket = { dim: Dim | null; unit: string | null; qty: number | null };
 
 /**
  * Aggregate the ingredients of all dishes — each scaled to `targetServings` —
@@ -37,10 +41,13 @@ export async function buildGroupedList(
         byUnit = new Map();
         agg.set(ing.canonical, byUnit);
       }
-      const unitKey = ing.unit ?? "";
-      const bucket = byUnit.get(unitKey) ?? { unit: ing.unit, qty: null };
-      if (ing.qty !== null) bucket.qty = (bucket.qty ?? 0) + ing.qty;
-      byUnit.set(unitKey, bucket);
+      // Convertible units share one bucket per dimension (summed in base units);
+      // everything else buckets by its raw unit string.
+      const info = ing.qty !== null ? unitInfo(ing.unit) : null;
+      const key = info ? `dim:${info.dim}` : `unit:${ing.unit ?? ""}`;
+      const bucket = byUnit.get(key) ?? { dim: info?.dim ?? null, unit: ing.unit, qty: null };
+      if (ing.qty !== null) bucket.qty = (bucket.qty ?? 0) + (info ? ing.qty * info.per : ing.qty);
+      byUnit.set(key, bucket);
     }
   }
 
@@ -60,12 +67,16 @@ export async function buildGroupedList(
       groups.set(key, group);
     }
     for (const bucket of byUnit.values()) {
+      const display =
+        bucket.dim !== null && bucket.qty !== null
+          ? displayBaseQty(bucket.qty, bucket.dim)
+          : { qty: bucket.qty, unit: bucket.unit };
       group.items.push({
         ingredient: canonical,
         product: offer.product,
         price: offer.price,
-        qty: bucket.qty,
-        unit: bucket.unit,
+        qty: display.qty,
+        unit: display.unit,
       });
     }
   }

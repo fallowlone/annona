@@ -61,10 +61,12 @@ export type IntentKind =
   | "remove_pantry"
   | "show_pantry"
   | "scale_dish"
+  | "pin_dish"
+  | "unpin_day"
   | "show_menu"
   | "show_list"
   | "help";
-export type Intent = { kind: IntentKind; dishNames: string[]; targetServings?: number };
+export type Intent = { kind: IntentKind; dishNames: string[]; targetServings?: number; day?: number };
 
 export type StoreGroup = {
   store: StoreKey;

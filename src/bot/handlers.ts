@@ -13,11 +13,14 @@ import { addToSelection, removeFromSelection, saveSelection, getSelection } from
 import { generateDish, insertDish, deleteDish, dishIdByName } from "../recipes/recipeStore";
 import type { Ingredient } from "../types";
 import { getPantry, addToPantry, removeFromPantry } from "../recipes/pantryStore";
+import { getPins, savePins, removePinsForDay } from "../recipes/pinsStore";
 import { esc } from "./format";
 
 const DEFAULT_COVERAGE_MIN = 0.7;
 const DEFAULT_DIGEST_LIMIT = 5;
 const DEFAULT_HOUSEHOLD = 2;
+// Accusative day names for "Закрепил … на <день>".
+const DAY_NAMES = ["", "понедельник", "вторник", "среду", "четверг", "пятницу", "субботу", "воскресенье"];
 
 // All replies use Telegram HTML parse mode (see bot.ts), so every dynamic string
 // — LLM-generated dish/ingredient names and scraped product/store text — must be
@@ -87,6 +90,7 @@ export function helpText(): string {
     "• «добавь блюдо шакшука» — своё блюдо в каталог.",
     "• «удали блюдо шакшука» — убрать блюдо из каталога.",
     "• «плов на 8 порций» — пересчёт ингредиентов.",
+    "• «пн борщ» — закрепить блюдо за днём (📌), «открепи пн» — снять.",
     "• «у меня есть рис, лук» — учту дома, уберу из списка.",
     "• /digest — что выгодно приготовить.",
     "• /menu — меню на неделю.",
@@ -127,7 +131,11 @@ export async function handleMenu(deps: {
   const chosen = ids.map((id) => byId.get(id)).filter((d): d is Dish => d !== undefined);
   const firsts = chosen.filter((d) => d.course === "first");
   const seconds = chosen.filter((d) => d.course !== "first");
-  const menu = planWeek(firsts, seconds, deps.menuDays);
+  const pins = getPins(deps.db, deps.week)
+    .map((p) => { const dd = byId.get(p.dishId); return dd ? { day: p.day, dish: dd } : null; })
+    .filter((x): x is { day: number; dish: Dish } => x !== null);
+  const pinnedDays = new Set(pins.map((p) => p.day));
+  const menu = planWeek(firsts, seconds, deps.menuDays, pins);
 
   const cost = new Map<number, number>();
   for (const d of chosen) cost.set(d.id as number, await estimateDishCost(deps.matcher, d));
@@ -138,7 +146,7 @@ export async function handleMenu(deps: {
   const labels = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
   const lines = [`📅 Меню на неделю (семья ${household}) · цены по акциям:\n`];
   for (const d of menu.days) {
-    const label = labels[(d.day - 1) % 7] ?? `День ${d.day}`;
+    const label = (pinnedDays.has(d.day) ? "📌 " : "") + (labels[(d.day - 1) % 7] ?? `День ${d.day}`);
     lines.push(`<b>${label}</b>: 🥣 ${cell(d.first)} · 🍽 ${cell(d.second)}`);
   }
   return lines.join("\n");
@@ -321,6 +329,36 @@ export async function handleScaleDish(
   const scaled = scaleIngredients(dish.ingredients, dish.servings, targetServings);
   const lines = scaled.map(fmtIngredient);
   return `🍳 ${esc(dish.nameRu)} ×${targetServings} порц.:\n${lines.join("\n")}`;
+}
+
+/** Pin a dish to a weekday (1=Mon…7=Sun); replaces an existing pin of the same
+ *  course on that day, and adds the dish to the week so it shows in menu + list. */
+export async function handlePinDish(
+  deps: { llm: Llm; db: Database; dishes: Dish[]; week: string },
+  name: string,
+  day: number
+): Promise<string> {
+  if (day < 1 || day > 7) return "Не понял день недели.";
+  const { matched } = await resolveDishes(deps.llm, deps.dishes, [name]);
+  const dish = matched[0];
+  if (!dish || dish.id === undefined) return `Не нашёл блюдо «${esc(name)}».`;
+  const byId = new Map(deps.dishes.filter((d) => d.id !== undefined).map((d) => [d.id as number, d]));
+  const pins = getPins(deps.db, deps.week).filter((p) => {
+    const existing = byId.get(p.dishId);
+    if (!existing) return false; // prune pins whose dish was removed from the catalogue
+    return !(p.day === day && existing.course === dish.course); // replace same day+course
+  });
+  pins.push({ day, dishId: dish.id });
+  savePins(deps.db, deps.week, pins);
+  addToSelection(deps.db, deps.week, [dish.id]);
+  return `📌 Закрепил «${esc(dish.nameRu)}» на ${DAY_NAMES[day]}.\n\n/menu — меню.`;
+}
+
+/** Clear all pins on a weekday. */
+export function handleUnpinDay(deps: { db: Database; week: string }, day: number): string {
+  if (day < 1 || day > 7) return "Не понял день недели.";
+  removePinsForDay(deps.db, deps.week, day);
+  return `Открепил ${DAY_NAMES[day]}. /menu — меню.`;
 }
 
 type PantryDeps = { db: Database; week: string };

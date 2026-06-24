@@ -62,6 +62,9 @@ cp .env "${STAGE}/.env"                                 # gitignored secrets, no
 echo "-> Syncing snapshot to ${HOST}:${DEST} (data volume untouched)..."
 rsync -az --delete --exclude data "${STAGE}/" "${HOST}:${DEST}/"
 
+echo "-> Restricting .env permissions on ${HOST}..."
+ssh "${HOST}" "chmod 600 ${DEST}/.env"   # secrets readable only by the deploy user (SEC-3)
+
 echo "-> Building and starting on ${HOST}..."
 ssh "${HOST}" "cd ${DEST} && docker compose up -d --build"
 

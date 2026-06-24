@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import {
   isAllowed, handleRecommend, handleSelect, handleMenu, handleList,
   handleAddDishes, handleRemoveDishes, previewCustomDish, confirmCustomDish,
-  previewDeleteDish, confirmDeleteDish, handleScaleDish,
+  previewDeleteDish, confirmDeleteDish, handleScaleDish, handlePinDish, handleUnpinDay,
   generateForSelection, saveDishToWeek,
 } from "../src/bot/handlers";
 import type { Dish, Offer } from "../src/types";
@@ -10,6 +10,7 @@ import type { Matcher } from "../src/matcher";
 import { openDb } from "../src/db/db";
 import { insertDish, listDishes } from "../src/recipes/recipeStore";
 import { saveSelection, getSelection } from "../src/recipes/selectionStore";
+import { getPins } from "../src/recipes/pinsStore";
 import type { Llm } from "../src/llm/llm";
 
 const llmResolve = (matchedIds: number[], unmatched: string[] = []): Llm => ({
@@ -177,6 +178,40 @@ test("handleMenu asks for a selection when none is saved", async () => {
   const db = openDb(":memory:");
   const text = await handleMenu({ db, dishes: [], matcher: noOffers, week: "2026-W26", menuDays: 7 });
   expect(text).toContain("выбери блюда");
+});
+
+test("handlePinDish pins a dish to a day; handleMenu shows it there with 📌", async () => {
+  const db = openDb(":memory:");
+  const id1 = insertDish(db, borsch);
+  const dishes = [{ ...borsch, id: id1 }];
+  const msg = await handlePinDish({ llm: llmResolve([id1]), db, dishes, week: "2026-W26" }, "борщ", 2);
+  expect(msg).toContain("Закрепил");
+  const menu = await handleMenu({ db, dishes, matcher: noOffers, week: "2026-W26", menuDays: 7 });
+  const tue = menu.split("\n").find((l) => l.includes("Вт"));
+  expect(tue).toContain("📌");
+  expect(tue).toContain("Борщ"); // pinned dish lands on Tuesday's first-course slot
+});
+
+test("handlePinDish prunes pins for dishes no longer in the catalogue", async () => {
+  const db = openDb(":memory:");
+  const idA = insertDish(db, borsch);
+  const idB = insertDish(db, plov);
+  await handlePinDish({ llm: llmResolve([idA]), db, dishes: [{ ...borsch, id: idA }, { ...plov, id: idB }], week: "2026-W26" }, "борщ", 2);
+  // борщ is now "gone" from the catalogue passed in; pinning плов must drop the stale pin.
+  await handlePinDish({ llm: llmResolve([idB]), db, dishes: [{ ...plov, id: idB }], week: "2026-W26" }, "плов", 3);
+  const ids = getPins(db, "2026-W26").map((p) => p.dishId);
+  expect(ids).not.toContain(idA); // stale pin pruned
+  expect(ids).toContain(idB);
+});
+
+test("handleUnpinDay clears a day's pin", async () => {
+  const db = openDb(":memory:");
+  const id1 = insertDish(db, borsch);
+  const dishes = [{ ...borsch, id: id1 }];
+  await handlePinDish({ llm: llmResolve([id1]), db, dishes, week: "2026-W26" }, "борщ", 2);
+  expect(handleUnpinDay({ db, week: "2026-W26" }, 2)).toContain("Открепил");
+  const menu = await handleMenu({ db, dishes, matcher: noOffers, week: "2026-W26", menuDays: 7 });
+  expect(menu).not.toContain("📌");
 });
 
 test("handleList groups the selection's ingredients by store", async () => {

@@ -83,6 +83,17 @@ test("returns null for a plain dish list (defers to the LLM router)", () => {
   expect(routeMessage("борщ, карбонара")).toBeNull();
 });
 
+test("routes '<day> <dish>' to pin_dish with the day number", () => {
+  expect(routeMessage("пн борщ")).toEqual({ kind: "pin_dish", dishNames: ["борщ"], day: 1 });
+  expect(routeMessage("среда: плов")).toEqual({ kind: "pin_dish", dishNames: ["плов"], day: 3 });
+  expect(routeMessage("вс карбонара")).toEqual({ kind: "pin_dish", dishNames: ["карбонара"], day: 7 });
+});
+
+test("routes 'открепи <day>' to unpin_day", () => {
+  expect(routeMessage("открепи пн")).toEqual({ kind: "unpin_day", dishNames: [], day: 1 });
+  expect(routeMessage("сними четверг")).toEqual({ kind: "unpin_day", dishNames: [], day: 4 });
+});
+
 test("routes navigation phrases without paying for an LLM classify", () => {
   expect(routeMessage("меню")).toEqual({ kind: "show_menu", dishNames: [] });
   expect(routeMessage("/menu")).toEqual({ kind: "show_menu", dishNames: [] });
