@@ -37,6 +37,21 @@ async function costText(matcher: Matcher, dish: Dish): Promise<string> {
   return `~${cost.toFixed(2)}€ (по акциям)`;
 }
 
+/**
+ * Return a dish's cooking steps, generating + caching them on first view.
+ * Extracted from the card handler so the lazy-generate path is unit-testable
+ * (cache hit avoids the LLM; a generation failure propagates to the caller,
+ * which surfaces it as an answerCallbackQuery error rather than crashing).
+ */
+export async function loadDishSteps(deps: { db: Database; llm: Llm }, dish: Dish): Promise<string> {
+  if (dish.id === undefined) throw new Error("loadDishSteps: dish has no id");
+  const cached = dishSteps(deps.db, dish.id);
+  if (cached) return cached;
+  const steps = await generateSteps(deps.llm, dish);
+  saveDishSteps(deps.db, dish.id, steps);
+  return steps;
+}
+
 export function createMenus(deps: MenuDeps): { main: Menu<Context> } {
   const browserPage = new Map<number, number>(); // userId → current recipe-browser page
   const selected = new Map<number, number>(); // userId → dish id whose card is open
@@ -51,16 +66,13 @@ export function createMenus(deps: MenuDeps): { main: Menu<Context> } {
         await ctx.answerCallbackQuery("Блюдо не найдено");
         return;
       }
-      let steps = dishSteps(deps.db, dish.id);
-      if (!steps) {
-        try {
-          steps = await generateSteps(deps.llm, dish);
-          saveDishSteps(deps.db, dish.id, steps);
-        } catch (e) {
-          log.error("recipe_steps_failed", { userId: uid, dishId: dish.id, ...errInfo(e) });
-          await ctx.answerCallbackQuery("Не получилось собрать рецепт, попробуй ещё раз");
-          return;
-        }
+      let steps: string;
+      try {
+        steps = await loadDishSteps({ db: deps.db, llm: deps.llm }, dish);
+      } catch (e) {
+        log.error("recipe_steps_failed", { userId: uid, dishId: dish.id, ...errInfo(e) });
+        await ctx.answerCallbackQuery("Не получилось собрать рецепт, попробуй ещё раз");
+        return;
       }
       await ctx.answerCallbackQuery();
       await ctx.editMessageText(renderDishCard(dish, await costText(deps.matcher, dish), steps), {
