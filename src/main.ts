@@ -37,6 +37,25 @@ const bot = createBot({
   coverageMin: cfg.offerCoverageMin,
   digestLimit: cfg.digestLimit,
 });
+// Drain on redeploy/stop: long-poll cleanly and close the DB so WAL is
+// checkpointed, instead of being hard-killed after Docker's 10s grace.
+const shutdown = async (sig: string): Promise<void> => {
+  log.info("shutting_down", { sig });
+  try {
+    await bot.stop();
+  } catch (e) {
+    log.error("bot_stop_failed", errInfo(e));
+  }
+  try {
+    db.close();
+  } catch (e) {
+    log.error("db_close_failed", errInfo(e));
+  }
+  process.exit(0);
+};
+process.once("SIGINT", () => void shutdown("SIGINT"));
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
+
 log.info("bot_starting");
 bot.start().catch((e) => {
   log.error("bot_start_failed", errInfo(e));

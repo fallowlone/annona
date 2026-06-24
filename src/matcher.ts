@@ -68,7 +68,7 @@ export function createMatcher(deps: {
 
     db.run(
       "INSERT OR REPLACE INTO match_cache(ingredient_canonical,week,offer_json,created_at) VALUES(?,?,?,?)",
-      [canonical, week, best ? JSON.stringify(best) : null, week]
+      [canonical, week, best ? JSON.stringify(best) : null, new Date().toISOString()]
     );
     return best;
   }

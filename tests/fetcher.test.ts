@@ -47,6 +47,13 @@ test("does not retry on non-retryable status (404)", async () => {
   expect(calls.length).toBe(1);
 });
 
+test("does not retry on 403 (anti-bot block — retrying escalates it)", async () => {
+  const { impl, calls } = fakeFetch([{ status: 403, body: "" }]);
+  const f = createFetcher({ fetchImpl: impl, sleep: async () => {} });
+  await expect(f.getJson("https://x.test/a", { retries: 3 })).rejects.toThrow("HTTP 403");
+  expect(calls.length).toBe(1);
+});
+
 test("retries network-level throws (ECONNREFUSED) then succeeds", async () => {
   let callCount = 0;
   const calls: string[] = [];
