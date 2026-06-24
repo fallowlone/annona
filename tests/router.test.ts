@@ -83,8 +83,20 @@ test("returns null for a plain dish list (defers to the LLM router)", () => {
   expect(routeMessage("борщ, карбонара")).toBeNull();
 });
 
-test("returns null for an open question", () => {
-  expect(routeMessage("что приготовить?")).toBeNull();
+test("routes navigation phrases without paying for an LLM classify", () => {
+  expect(routeMessage("меню")).toEqual({ kind: "show_menu", dishNames: [] });
+  expect(routeMessage("/menu")).toEqual({ kind: "show_menu", dishNames: [] });
+  expect(routeMessage("список")).toEqual({ kind: "show_list", dishNames: [] });
+  expect(routeMessage("покупки")).toEqual({ kind: "show_list", dishNames: [] });
+  expect(routeMessage("что приготовить?")).toEqual({ kind: "suggest", dishNames: [] });
+  expect(routeMessage("выгодно")).toEqual({ kind: "suggest", dishNames: [] });
+  expect(routeMessage("привет")).toEqual({ kind: "help", dishNames: [] });
+  expect(routeMessage("/start")).toEqual({ kind: "help", dishNames: [] });
+});
+
+test("navigation routes do not swallow edit verbs that share a word", () => {
+  // "добавь меню" is still an add, not show_menu (anchored navigation regex).
+  expect(routeMessage("добавь меню")).toEqual({ kind: "add_dishes", dishNames: ["меню"] });
 });
 
 test("returns null for an empty message", () => {

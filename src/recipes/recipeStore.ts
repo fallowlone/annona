@@ -194,12 +194,18 @@ export async function seedDishes(db: Database, llm: Llm, target: number): Promis
   const need = Math.max(0, target - seen.size);
 
   const BATCH = 8;
+  // Only the most recent names go into the anti-repeat hint. Sending the full
+  // `seen` set grew the prompt O(n) per batch → O(n²) input tokens over a run;
+  // a bounded window keeps each prompt O(1) while still steering away from the
+  // last couple of batches (the post-hoc `seen.has` check dedupes the rest).
+  const EXCLUDE_WINDOW = 16;
   let added = 0;
   while (added < need) {
     const want = Math.min(BATCH, need - added);
+    const recent = [...seen].slice(-EXCLUDE_WINDOW);
     const exclude =
-      seen.size > 0
-        ? ` Do NOT repeat any of these already-known dishes: ${[...seen].join(", ")}.`
+      recent.length > 0
+        ? ` Do NOT repeat any of these already-known dishes: ${recent.join(", ")}.`
         : "";
     const out = await llm.structured({
       system:
