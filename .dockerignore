@@ -11,7 +11,6 @@ data
 docs
 tests
 fixtures
-scripts
 *.md
 Dockerfile
 .dockerignore

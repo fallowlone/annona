@@ -8,7 +8,11 @@ import { listDishes } from "./recipes/recipeStore";
 import { isoWeek } from "./util/week";
 import { createBot } from "./bot/bot";
 import { log, errInfo } from "./log";
+import { writeHeartbeat } from "./health";
 import type { StoreKey } from "./stores";
+
+const HEARTBEAT_PATH = "data/heartbeat";
+const HEARTBEAT_MS = 30_000;
 
 const cfg = loadConfig(Bun.env);
 const db = openDb("data/annona.db");
@@ -36,10 +40,16 @@ const bot = createBot({
   coverageMin: cfg.offerCoverageMin,
   digestLimit: cfg.digestLimit,
 });
+// Liveness heartbeat on a timer (independent of incoming updates, so an idle
+// bot still looks healthy). The Docker HEALTHCHECK fails if it goes stale.
+writeHeartbeat(HEARTBEAT_PATH, new Date());
+const heartbeat = setInterval(() => writeHeartbeat(HEARTBEAT_PATH, new Date()), HEARTBEAT_MS);
+
 // Drain on redeploy/stop: long-poll cleanly and close the DB so WAL is
 // checkpointed, instead of being hard-killed after Docker's 10s grace.
 const shutdown = async (sig: string): Promise<void> => {
   log.info("shutting_down", { sig });
+  clearInterval(heartbeat);
   try {
     await bot.stop();
   } catch (e) {
