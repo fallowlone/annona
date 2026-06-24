@@ -23,14 +23,12 @@ const DishSchema = z.object({
   ingredients: z.array(IngredientSchema).min(1),
 });
 
-// Zod infers nullable fields in the schema that don't structurally match the Dish interface, so we cast to bridge them.
-export const DishSeedSchema: z.ZodType<{ dishes: Dish[] }> = z.object({
-  dishes: z.array(DishSchema),
-}) as unknown as z.ZodType<{ dishes: Dish[] }>;
+// Inferred output (course is a required enum here, since the model always emits
+// it) is a structural subtype of Dish (course optional|null), so it's directly
+// assignable wherever a Dish is expected — no cast needed.
+export const DishSeedSchema = z.object({ dishes: z.array(DishSchema) });
 
-const GenerateDishSchema: z.ZodType<{ dish: Dish }> = z.object({
-  dish: DishSchema,
-}) as unknown as z.ZodType<{ dish: Dish }>;
+const GenerateDishSchema = z.object({ dish: DishSchema });
 
 const StepsSchema = z.object({ steps: z.string().min(1) });
 
